@@ -1,15 +1,32 @@
+# ═══════════════════════════════════════════════
+# APPLICATION
+# ═══════════════════════════════════════════════
 spring.application.name=ongfodde
 
-spring.datasource.url=jdbc:postgresql://VOTRE_HOST:5432/postgres
-spring.datasource.username=VOTRE_USERNAME
+# ═══════════════════════════════════════════════
+# BASE DE DONNÉES — SUPABASE SESSION POOLER
+# ═══════════════════════════════════════════════
+spring.datasource.url=jdbc:postgresql://VOTRE_HOST.pooler.supabase.com:5432/postgres?stringtype=unspecified
+spring.datasource.username=postgres.VOTRE_REF
 spring.datasource.password=VOTRE_MOT_DE_PASSE
 spring.datasource.driver-class-name=org.postgresql.Driver
 
+# ═══════════════════════════════════════════════
+# JPA / HIBERNATE
+# ═══════════════════════════════════════════════
 spring.jpa.hibernate.ddl-auto=none
 spring.jpa.show-sql=true
+spring.jpa.properties.hibernate.format_sql=true
 spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.PostgreSQLDialect
+spring.jpa.properties.hibernate.type.preferred_uuid_jdbc_type=VARCHAR
 
+# ═══════════════════════════════════════════════
+# FLYWAY — désactivé (tables déjà créées)
+# ═══════════════════════════════════════════════
 spring.flyway.enabled=false
 
-app.jwt.secret=VOTRE_JWT_SECRET
+# ═══════════════════════════════════════════════
+# JWT
+# ═══════════════════════════════════════════════
+app.jwt.secret=VOTRE_JWT_SECRET_MINIMUM_32_CARACTERES
 app.jwt.expiration=86400000
