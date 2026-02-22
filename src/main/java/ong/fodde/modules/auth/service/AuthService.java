@@ -34,7 +34,15 @@ public class AuthService {
     public LoginResponse login(LoginRequest request) {
         User user = userRepository.findByEmail(request.email())
                 .orElseThrow(() -> new AuthentificationException("Email ou mot de passe incorrect"));
+        // DEBUG TEMPORAIRE — à supprimer après
+        System.out.println("=== DEBUG ===");
+        System.out.println("Email trouvé : " + user.getEmail());
+        System.out.println("Hash en base : " + user.getMotDePasseHash());
+        System.out.println("Mot de passe reçu : " + request.motDePasse());
+        System.out.println("Match BCrypt : " + passwordEncoder.matches(request.motDePasse(), user.getMotDePasseHash()));
+        System.out.println("=============");
 
+        
         // Vérifier si le compte est verrouillé
         if (user.getTentativesEchouees() != null && user.getTentativesEchouees() >= 5) {
             throw new CompteVerrouilleException("Compte verrouillé suite à trop de tentatives échouées. Contactez un administrateur.");
@@ -56,24 +64,39 @@ public class AuthService {
         }
 
         // Succès : reset tentatives et update dernière connexion
-        user.setTentativesEchouees(0);
-        user.setDerniereConnexion(LocalDateTime.now());
-        userRepository.save(user);
+user.setTentativesEchouees(0);
+user.setDerniereConnexion(LocalDateTime.now());
+userRepository.save(user);
 
-        // Générer le token JWT
-        String token = jwtService.generateToken(user);
+// ↓↓↓ REMPLACEZ TOUT CE QUI SUIT PAR CECI ↓↓↓
 
-        List<String> roles = user.getRoles().stream()
-                .map(Role::getNom)
-                .toList();
+List<String> roles = user.getRoles().stream()
+        .map(Role::getNom)
+        .toList();
 
-        return new LoginResponse(
-                token,
-                user.getId(),
-                user.getEmail(),
-                user.getNom(),
-                user.getPrenom(),
-                roles
-        );
+// DEBUG TEMPORAIRE
+try {
+    String token = jwtService.generateToken(user);
+    System.out.println("=== TOKEN GÉNÉRÉ : " + token.substring(0, 30) + "...");
+    return new LoginResponse(
+            token,
+            user.getId(),
+            user.getEmail(),
+            user.getNom(),
+            user.getPrenom(),
+            roles
+    );
+} catch (Exception e) {
+    System.out.println("=== ERREUR GÉNÉRATION TOKEN : " + e.getMessage());
+    throw e;
+}
     }
+    // TEMPORAIRE — à supprimer après
+public static void main(String[] args) {
+    org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder encoder = 
+        new org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder();
+    System.out.println(encoder.encode("Test1234!"));
+
+    
+}
 }

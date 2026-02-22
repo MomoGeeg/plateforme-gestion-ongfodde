@@ -46,9 +46,9 @@ public class User extends BaseEntity {
     @Column(name = "service")
     private String service;
 
-    @Enumerated(EnumType.STRING)
-    @Column(name = "statut", nullable = false)
-    private StatutUser statut = StatutUser.EN_ATTENTE;
+   @Enumerated(EnumType.STRING)
+  @Column(nullable = false, length = 20, columnDefinition = "statut_user")
+  private StatutUser statut = StatutUser.EN_ATTENTE;
 
     @Column(name = "tentatives_echouees", nullable = false)
     private Integer tentativesEchouees = 0;
@@ -57,10 +57,10 @@ public class User extends BaseEntity {
     private LocalDateTime derniereConnexion;
 
     @ManyToMany(fetch = FetchType.EAGER)
-    @JoinTable(
-        name = "user_roles",
-        joinColumns = @JoinColumn(name = "user_id"),
-        inverseJoinColumns = @JoinColumn(name = "role_id")
-    )
-    private Set<Role> roles = new HashSet<>();
+@JoinTable(
+    name = "user_roles",
+    joinColumns = @JoinColumn(name = "user_id", columnDefinition = "uuid"),
+    inverseJoinColumns = @JoinColumn(name = "role_id", columnDefinition = "uuid")
+)
+private Set<Role> roles = new HashSet<>();
 }
