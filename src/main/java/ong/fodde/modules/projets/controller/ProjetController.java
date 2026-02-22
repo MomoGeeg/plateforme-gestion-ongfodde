@@ -32,7 +32,7 @@ public class ProjetController {
     }
 
     @PostMapping
-    @PreAuthorize("hasAnyRole('RAF', 'ADMIN')")
+    @PreAuthorize("hasAuthority('ROLE_RAF') or hasAuthority('ROLE_ADMIN')")
     public ResponseEntity<ProjetResponse> creerProjet(@Valid @RequestBody ProjetRequest request) {
         ProjetResponse response = projetService.creerProjet(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
@@ -51,7 +51,7 @@ public class ProjetController {
     }
 
     @PatchMapping("/{id}/statut")
-    @PreAuthorize("hasAnyRole('RAF', 'ADMIN')")
+    @PreAuthorize("hasAuthority('ROLE_RAF') or hasAuthority('ROLE_ADMIN')")
     public ResponseEntity<ProjetResponse> changerStatut(
             @PathVariable UUID id,
             @RequestBody Map<String, String> body) {

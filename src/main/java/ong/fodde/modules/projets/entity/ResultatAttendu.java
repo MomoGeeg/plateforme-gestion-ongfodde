@@ -34,6 +34,6 @@ public class ResultatAttendu {
     @Column(name = "ordre")
     private Integer ordre = 1;
 
-    @Column(name = "created_at", updatable = false)
-    private LocalDateTime createdAt;
+    @Column(name = "created_at")
+private LocalDateTime createdAt = LocalDateTime.now();
 }
