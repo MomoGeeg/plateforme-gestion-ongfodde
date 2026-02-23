@@ -2,6 +2,7 @@ package ong.fodde.modules.projets.dto;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.UUID;
 
 import jakarta.validation.constraints.NotBlank;
@@ -33,5 +34,8 @@ public record ProjetRequest(
     Devise devise,
 
     @NotNull(message = "Le responsable est obligatoire")
-    UUID responsableId
+    UUID responsableId,
+
+    // Membres de l'équipe projet — optionnel à la création, modifiable après
+    List<UUID> equipeIds
 ) {}
