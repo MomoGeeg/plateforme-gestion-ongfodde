@@ -60,7 +60,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                     authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
 
                     SecurityContextHolder.getContext().setAuthentication(authToken);
-                    System.out.println("=== AUTH OK : " + email + " | Roles : " + authorities);
+                    //System.out.println("=== AUTH OK : " + email + " | Roles : " + authorities);
                 }
             }
         } catch (Exception e) {
