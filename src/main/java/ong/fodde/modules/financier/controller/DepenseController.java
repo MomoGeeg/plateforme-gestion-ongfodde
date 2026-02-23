@@ -33,7 +33,8 @@ public class DepenseController {
     }
 
     @PostMapping
-    @PreAuthorize("hasAuthority('ROLE_RAF', 'COMPTABLE', 'ADMIN')")
+    @PreAuthorize("hasAuthority('ROLE_RAF') or hasAuthority('ROLE_COMPTABLE') or hasAuthority('ROLE_ADMIN')")
+
     public ResponseEntity<DepenseResponse> soumettreDepense(
             @Valid @RequestBody DepenseRequest request,
             @RequestParam UUID userId) {
@@ -48,7 +49,8 @@ public class DepenseController {
     }
 
     @PatchMapping("/{id}/statut")
-    @PreAuthorize("hasAuthority('ROLE_RAF', 'SE', 'ADMIN')")
+    @PreAuthorize("hasAuthority('ROLE_RAF') or hasAuthority('ROLE_SE') or hasAuthority('ROLE_ADMIN')")
+
     public ResponseEntity<DepenseResponse> changerStatut(
             @PathVariable UUID id,
             @RequestBody Map<String, String> body) {
@@ -62,5 +64,14 @@ public class DepenseController {
     @PreAuthorize("isAuthenticated()")
     public ResponseEntity<List<DepenseResponse>> mesDepenses(@RequestParam UUID userId) {
         return ResponseEntity.ok(depenseService.mesDepenses(userId));
+    }
+
+    @PatchMapping("/{id}/annuler")
+    @PreAuthorize("hasAuthority('ROLE_RAF') or hasAuthority('ROLE_ADMIN')")
+    public ResponseEntity<DepenseResponse> annulerDepense(
+            @PathVariable UUID id,
+            @RequestParam String motif,
+            @RequestParam UUID userId) {
+        return ResponseEntity.ok(depenseService.annulerDepense(id, motif, userId));
     }
 }

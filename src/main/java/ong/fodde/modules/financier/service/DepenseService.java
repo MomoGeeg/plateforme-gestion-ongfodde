@@ -17,6 +17,9 @@ import ong.fodde.modules.financier.entity.LigneBudgetaire;
 import ong.fodde.modules.financier.entity.StatutDepense;
 import ong.fodde.modules.financier.repository.DepenseRepository;
 import ong.fodde.modules.financier.repository.LigneBudgetaireRepository;
+import ong.fodde.modules.projets.entity.Projet;
+import ong.fodde.modules.projets.entity.StatutProjet;
+import ong.fodde.modules.projets.repository.ProjetRepository;
 import ong.fodde.shared.exception.BusinessException;
 import ong.fodde.shared.exception.ResourceNotFoundException;
 
@@ -26,6 +29,7 @@ public class DepenseService {
 
     private final DepenseRepository depenseRepository;
     private final LigneBudgetaireRepository ligneBudgetaireRepository;
+    private final ProjetRepository projetRepository;
 
     /** Transitions de statut autorisées pour les dépenses */
     private static final Map<StatutDepense, Set<StatutDepense>> TRANSITIONS = Map.of(
@@ -40,9 +44,12 @@ public class DepenseService {
 
     private long compteurDepense = 0;
 
-    public DepenseService(DepenseRepository depenseRepository, LigneBudgetaireRepository ligneBudgetaireRepository) {
+    public DepenseService(DepenseRepository depenseRepository,
+                           LigneBudgetaireRepository ligneBudgetaireRepository,
+                           ProjetRepository projetRepository) {
         this.depenseRepository = depenseRepository;
         this.ligneBudgetaireRepository = ligneBudgetaireRepository;
+        this.projetRepository = projetRepository;
     }
 
     public DepenseResponse soumettreDepense(DepenseRequest request, UUID userId) {
@@ -53,6 +60,16 @@ public class DepenseService {
         // Vérifier que la ligne n'est pas gelée
         if (Boolean.TRUE.equals(ligne.getEstGelee())) {
             throw new BusinessException("La ligne budgétaire '" + ligne.getCode() + "' est gelée. Aucune dépense ne peut être enregistrée.");
+        }
+
+        // Vérifier le statut du projet
+        Projet projet = projetRepository.findById(request.projetId())
+            .orElseThrow(() -> new ResourceNotFoundException("Projet introuvable"));
+        if (projet.getStatut() == StatutProjet.SUSPENDU) {
+            throw new BusinessException("Impossible d'enregistrer une dépense sur un projet suspendu");
+        }
+        if (projet.getStatut() == StatutProjet.CLOTURE) {
+            throw new BusinessException("Impossible d'enregistrer une dépense sur un projet clôturé");
         }
 
         // Vérifier le solde disponible
@@ -124,6 +141,25 @@ public class DepenseService {
         }
 
         Depense saved = depenseRepository.save(depense);
+
+        // Mise à jour du montant dépensé sur la ligne budgétaire lors de la validation
+        if (nouveauStatut == StatutDepense.VALIDEE) {
+            LigneBudgetaire ligne = ligneBudgetaireRepository.findById(depense.getLigneBudgetaireId())
+                .orElseThrow(() -> new ResourceNotFoundException("Ligne budgétaire introuvable"));
+            BigDecimal montantDepenseActuel = ligne.getMontantDepense() != null ? ligne.getMontantDepense() : BigDecimal.ZERO;
+            ligne.setMontantDepense(montantDepenseActuel.add(depense.getMontant()));
+            ligneBudgetaireRepository.save(ligne);
+            BigDecimal taux = ligne.getMontantPrevu().compareTo(BigDecimal.ZERO) > 0
+                ? montantDepenseActuel.add(depense.getMontant())
+                    .multiply(BigDecimal.valueOf(100))
+                    .divide(ligne.getMontantPrevu(), 2, java.math.RoundingMode.HALF_UP)
+                : BigDecimal.ZERO;
+            if (taux.compareTo(BigDecimal.valueOf(80)) >= 0) {
+                System.out.println("⚠️ ALERTE BUDGET : ligne " + ligne.getCode()
+                    + " a atteint " + taux + "% de consommation sur le projet " + depense.getProjetId());
+            }
+        }
+
         return toResponse(saved);
     }
 
@@ -138,6 +174,27 @@ public class DepenseService {
         int annee = LocalDate.now().getYear();
         compteurDepense++;
         return String.format("DEP-%d-%06d", annee, compteurDepense);
+    }
+
+    public DepenseResponse annulerDepense(UUID id, String motif, UUID userId) {
+        Depense depense = depenseRepository.findById(id)
+            .orElseThrow(() -> new ResourceNotFoundException("Dépense introuvable : " + id));
+
+        if (depense.getStatut() == StatutDepense.ANNULEE) {
+            throw new BusinessException("La dépense est déjà annulée");
+        }
+
+        if (depense.getStatut() == StatutDepense.VALIDEE) {
+            LigneBudgetaire ligne = ligneBudgetaireRepository.findById(depense.getLigneBudgetaireId())
+                .orElseThrow(() -> new ResourceNotFoundException("Ligne budgétaire introuvable"));
+            BigDecimal actuel = ligne.getMontantDepense() != null ? ligne.getMontantDepense() : BigDecimal.ZERO;
+            ligne.setMontantDepense(actuel.subtract(depense.getMontant()));
+            ligneBudgetaireRepository.save(ligne);
+        }
+
+        depense.setStatut(StatutDepense.ANNULEE);
+        depense.setMotifRejet(motif);
+        return toResponse(depenseRepository.save(depense));
     }
 
     private DepenseResponse toResponse(Depense depense) {
