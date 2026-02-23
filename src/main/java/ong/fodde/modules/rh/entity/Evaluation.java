@@ -32,7 +32,7 @@ public class Evaluation extends BaseEntity {
 
     @Enumerated(EnumType.STRING)
     @Column(name = "statut", nullable = false, columnDefinition = "statut_eval")
-    private StatutEval statut = StatutEval.PLANIFIEE;
+    private StatutEval statut = StatutEval.EN_COURS;
 
     @Column(name = "note_globale")
     private BigDecimal noteGlobale;
