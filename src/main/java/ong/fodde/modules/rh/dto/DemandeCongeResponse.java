@@ -15,9 +15,13 @@ public record DemandeCongeResponse(
         LocalDate dateFin,
         String motif,
         StatutConge statut,
-        UUID approbateurId,
-        String commentaireApprobateur,
-        LocalDateTime createdAt,
-        Long nombreJours
+        UUID valideParN1,
+        UUID valideParRh,
+        LocalDateTime dateValidationN1,
+        LocalDateTime dateValidationRh,
+        String justificatifUrl,
+        String motifRejet,
+        Integer nbJours,
+        LocalDateTime createdAt
 ) {
 }

@@ -15,6 +15,4 @@ public interface DemandeCongeRepository extends JpaRepository<DemandeConge, UUID
     List<DemandeConge> findByEmployeId(UUID employeId);
 
     List<DemandeConge> findByStatut(StatutConge statut);
-
-    List<DemandeConge> findByApprobateurId(UUID approbateurId);
 }

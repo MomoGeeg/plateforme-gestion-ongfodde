@@ -1,6 +1,7 @@
 package ong.fodde.modules.rh.entity;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.UUID;
 
 import jakarta.persistence.Column;
@@ -40,9 +41,24 @@ public class DemandeConge extends BaseEntity {
     @Column(name = "statut", nullable = false, columnDefinition = "statut_conge")
     private StatutConge statut = StatutConge.EN_ATTENTE;
 
-    @Column(name = "approbateur_id", columnDefinition = "uuid")
-    private UUID approbateurId;
+    @Column(name = "valide_par_n1", columnDefinition = "uuid")
+    private UUID valideParN1;
 
-    @Column(name = "commentaire_approbateur", columnDefinition = "text")
-    private String commentaireApprobateur;
+    @Column(name = "valide_par_rh", columnDefinition = "uuid")
+    private UUID valideParRh;
+
+    @Column(name = "date_validation_n1")
+    private LocalDateTime dateValidationN1;
+
+    @Column(name = "date_validation_rh")
+    private LocalDateTime dateValidationRh;
+
+    @Column(name = "justificatif_url")
+    private String justificatifUrl;
+
+    @Column(name = "motif_rejet")
+    private String motifRejet;
+
+    @Column(name = "nb_jours")
+    private Integer nbJours;
 }

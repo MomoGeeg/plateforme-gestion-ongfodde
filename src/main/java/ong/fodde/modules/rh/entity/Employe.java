@@ -62,4 +62,7 @@ public class Employe extends BaseEntity {
 
     @Column(name = "superviseur_id", columnDefinition = "uuid")
     private UUID superviseurId;
+
+    @Column(name = "solde_conges")
+    private Integer soldeConges = 30;
 }

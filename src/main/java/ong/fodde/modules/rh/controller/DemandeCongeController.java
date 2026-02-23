@@ -18,7 +18,6 @@ import org.springframework.web.bind.annotation.RestController;
 import jakarta.validation.Valid;
 import ong.fodde.modules.rh.dto.DemandeCongeRequest;
 import ong.fodde.modules.rh.dto.DemandeCongeResponse;
-import ong.fodde.modules.rh.entity.StatutConge;
 import ong.fodde.modules.rh.service.DemandeCongeService;
 
 @RestController
@@ -38,13 +37,32 @@ public class DemandeCongeController {
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
-    @PatchMapping("/{id}/traiter")
+    @PatchMapping("/{id}/valider-n1")
+    @PreAuthorize("hasAuthority('ROLE_RH') or hasAuthority('ROLE_ADMIN') or hasAuthority('ROLE_RESPONSABLE_PROGRAMMES')")
+    public ResponseEntity<DemandeCongeResponse> validerN1(@PathVariable UUID id,
+                                                           @RequestParam UUID validateurId) {
+        return ResponseEntity.ok(demandeCongeService.validerN1(id, validateurId));
+    }
+
+    @PatchMapping("/{id}/approuver-rh")
     @PreAuthorize("hasAuthority('ROLE_RH') or hasAuthority('ROLE_ADMIN')")
-    public ResponseEntity<DemandeCongeResponse> traiterDemande(@PathVariable UUID id,
-                                                                @RequestParam StatutConge statut,
-                                                                @RequestParam UUID approbateurId,
-                                                                @RequestParam(required = false) String commentaire) {
-        return ResponseEntity.ok(demandeCongeService.traiterDemande(id, statut, approbateurId, commentaire));
+    public ResponseEntity<DemandeCongeResponse> approuverRH(@PathVariable UUID id,
+                                                             @RequestParam UUID validateurId) {
+        return ResponseEntity.ok(demandeCongeService.approuverRH(id, validateurId));
+    }
+
+    @PatchMapping("/{id}/rejeter")
+    @PreAuthorize("hasAuthority('ROLE_RH') or hasAuthority('ROLE_ADMIN') or hasAuthority('ROLE_RESPONSABLE_PROGRAMMES')")
+    public ResponseEntity<DemandeCongeResponse> rejeter(@PathVariable UUID id,
+                                                         @RequestParam UUID validateurId,
+                                                         @RequestParam(required = false) String motif) {
+        return ResponseEntity.ok(demandeCongeService.rejeter(id, validateurId, motif));
+    }
+
+    @PatchMapping("/{id}/annuler")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<DemandeCongeResponse> annuler(@PathVariable UUID id) {
+        return ResponseEntity.ok(demandeCongeService.annuler(id));
     }
 
     @GetMapping("/mes-conges/{employeId}")
@@ -54,8 +72,14 @@ public class DemandeCongeController {
     }
 
     @GetMapping("/en-attente")
-    @PreAuthorize("hasAuthority('ROLE_RH') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('ROLE_RH') or hasAuthority('ROLE_ADMIN') or hasAuthority('ROLE_RESPONSABLE_PROGRAMMES')")
     public ResponseEntity<List<DemandeCongeResponse>> congesEnAttente() {
         return ResponseEntity.ok(demandeCongeService.congesEnAttente());
+    }
+
+    @GetMapping("/valide-n1")
+    @PreAuthorize("hasAuthority('ROLE_RH') or hasAuthority('ROLE_ADMIN')")
+    public ResponseEntity<List<DemandeCongeResponse>> congesValideN1() {
+        return ResponseEntity.ok(demandeCongeService.congesValideN1());
     }
 }
