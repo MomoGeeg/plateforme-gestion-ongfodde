@@ -34,15 +34,8 @@ public class AuthService {
     public LoginResponse login(LoginRequest request) {
         User user = userRepository.findByEmail(request.email())
                 .orElseThrow(() -> new AuthentificationException("Email ou mot de passe incorrect"));
-        // DEBUG TEMPORAIRE — à supprimer après
-        System.out.println("=== DEBUG ===");
-        System.out.println("Email trouvé : " + user.getEmail());
-        System.out.println("Hash en base : " + user.getMotDePasseHash());
-        System.out.println("Mot de passe reçu : " + request.motDePasse());
-        System.out.println("Match BCrypt : " + passwordEncoder.matches(request.motDePasse(), user.getMotDePasseHash()));
-        System.out.println("=============");
-
         
+
         // Vérifier si le compte est verrouillé
         if (user.getTentativesEchouees() != null && user.getTentativesEchouees() >= 5) {
             throw new CompteVerrouilleException("Compte verrouillé suite à trop de tentatives échouées. Contactez un administrateur.");
