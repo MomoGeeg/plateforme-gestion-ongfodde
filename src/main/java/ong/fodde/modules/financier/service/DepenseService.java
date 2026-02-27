@@ -154,10 +154,7 @@ public class DepenseService {
                     .multiply(BigDecimal.valueOf(100))
                     .divide(ligne.getMontantPrevu(), 2, java.math.RoundingMode.HALF_UP)
                 : BigDecimal.ZERO;
-            if (taux.compareTo(BigDecimal.valueOf(80)) >= 0) {
-                System.out.println("⚠️ ALERTE BUDGET : ligne " + ligne.getCode()
-                    + " a atteint " + taux + "% de consommation sur le projet " + depense.getProjetId());
-            }
+
         }
 
         return toResponse(saved);

@@ -1,14 +1,11 @@
 package ong.fodde.modules.projets.service;
 
 import java.time.LocalDate;
-import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,8 +24,6 @@ import ong.fodde.shared.exception.ResourceNotFoundException;
 @Service
 @Transactional
 public class ProjetService {
-
-    private static final Logger log = LoggerFactory.getLogger(ProjetService.class);
 
     private final ProjetRepository projetRepository;
     private final UserRepository userRepository;
@@ -84,9 +79,6 @@ public class ProjetService {
         }
 
         Projet saved = projetRepository.save(projet);
-        log.info("✅ Projet {} créé avec {} membres d'équipe",
-            saved.getCode(),
-            saved.getEquipe().size());
 
         return toResponse(saved);
     }
@@ -133,31 +125,20 @@ public class ProjetService {
                     "Le projet doit avoir au moins un membre dans l'équipe avant soumission"
                 );
             }
-            log.info("📋 Projet {} soumis au SE pour validation par {}",
-                projet.getCode(), validateurId);
         }
 
-        // Règle 5 : Passage EN_VALIDATION → ACTIF réservé au SE
-        if (nouveauStatut == StatutProjet.ACTIF) {
-            log.info("✅ Projet {} activé par le SE {} — notification équipe envoyée",
-                projet.getCode(), validateurId);
-        }
+
 
         // Règle 6 : Passage EN_VALIDATION → BROUILLON (rejet SE avec commentaire)
         if (nouveauStatut == StatutProjet.BROUILLON && statutActuel == StatutProjet.EN_VALIDATION) {
             if (commentaire == null || commentaire.isBlank()) {
                 throw new BusinessException("Un commentaire est obligatoire pour rejeter un projet");
             }
-            log.info("❌ Projet {} rejeté par le SE {} — motif : {}",
-                projet.getCode(), validateurId, commentaire);
         }
 
         // Règle 7 : Clôture impossible sans rapport dans la GED
         // (vérification simplifiée — à enrichir avec GED en version 2)
-        if (nouveauStatut == StatutProjet.CLOTURE) {
-            log.warn("⚠️ Projet {} en cours de clôture — vérifier rapport de clôture dans la GED",
-                projet.getCode());
-        }
+
 
         projet.setStatut(nouveauStatut);
         Projet saved = projetRepository.save(projet);
@@ -178,8 +159,6 @@ public class ProjetService {
 
         projet.getEquipe().add(user);
         projetRepository.save(projet);
-
-        log.info("👤 Utilisateur {} ajouté à l'équipe du projet {}", userId, projet.getCode());
     }
 
     public void retirerMembreEquipe(UUID projetId, UUID userId) {
@@ -199,8 +178,6 @@ public class ProjetService {
 
         projet.getEquipe().remove(user);
         projetRepository.save(projet);
-
-        log.info("👤 Utilisateur {} retiré de l'équipe du projet {}", userId, projet.getCode());
     }
 
     public ProjetResponse prolongerDateFin(UUID id, LocalDate nouvelleDateFin, String justification) {
@@ -228,34 +205,13 @@ public class ProjetService {
         projet.setDateFin(nouvelleDateFin);
         projetRepository.save(projet);
 
-        log.info("📅 Projet {} prolongé : {} → {} — justification : {}",
-            projet.getCode(), ancienneDateFin, nouvelleDateFin, justification);
-
         return toResponse(projet);
     }
 
     // Règle 11 : Alerte 30 jours avant fin — @Scheduled tous les jours à 7h00
     @Scheduled(cron = "0 0 7 * * *")
     public void verifierEcheancesProjets() {
-        List<Projet> projetsActifs = projetRepository.findByStatut(StatutProjet.ACTIF);
-        LocalDate aujourdHui = LocalDate.now();
-
-        for (Projet projet : projetsActifs) {
-            if (projet.getDateFin() == null) continue;
-
-            long joursRestants = ChronoUnit.DAYS.between(aujourdHui, projet.getDateFin());
-
-            if (joursRestants < 0) {
-                log.warn("🚨 Projet {} est en dépassement de {} jours — statut toujours ACTIF",
-                    projet.getCode(), Math.abs(joursRestants));
-            } else if (joursRestants <= 7) {
-                log.warn("🚨 ALERTE PROJET [7 JOURS] : {} expire le {} ({} jours restants)",
-                    projet.getCode(), projet.getDateFin(), joursRestants);
-            } else if (joursRestants <= 30) {
-                log.warn("⚠️ ALERTE PROJET [30 JOURS] : {} expire le {} ({} jours restants)",
-                    projet.getCode(), projet.getDateFin(), joursRestants);
-            }
-        }
+        // Vérification périodique des échéances projets
     }
 
     @Transactional(readOnly = true)

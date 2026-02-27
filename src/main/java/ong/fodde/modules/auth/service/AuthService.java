@@ -61,28 +61,19 @@ user.setTentativesEchouees(0);
 user.setDerniereConnexion(LocalDateTime.now());
 userRepository.save(user);
 
-// ↓↓↓ REMPLACEZ TOUT CE QUI SUIT PAR CECI ↓↓↓
-
 List<String> roles = user.getRoles().stream()
         .map(Role::getNom)
         .toList();
 
-// DEBUG TEMPORAIRE
-try {
-    String token = jwtService.generateToken(user);
-    System.out.println("=== TOKEN GÉNÉRÉ : " + token.substring(0, 30) + "...");
-    return new LoginResponse(
-            token,
-            user.getId(),
-            user.getEmail(),
-            user.getNom(),
-            user.getPrenom(),
-            roles
-    );
-} catch (Exception e) {
-    System.out.println("=== ERREUR GÉNÉRATION TOKEN : " + e.getMessage());
-    throw e;
-}
+String token = jwtService.generateToken(user);
+return new LoginResponse(
+        token,
+        user.getId(),
+        user.getEmail(),
+        user.getNom(),
+        user.getPrenom(),
+        roles
+);
     }
 
 }

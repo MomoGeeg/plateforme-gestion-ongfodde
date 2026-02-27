@@ -4,8 +4,6 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -20,8 +18,6 @@ import ong.fodde.shared.exception.ResourceNotFoundException;
 @Service
 @Transactional
 public class RapportActiviteService {
-
-    private static final Logger log = LoggerFactory.getLogger(RapportActiviteService.class);
 
     private final RapportActiviteRepository rapportActiviteRepository;
 
@@ -43,7 +39,6 @@ public class RapportActiviteService {
         rapport.setStatut(StatutRapport.SOUMIS);
 
         RapportActivite saved = rapportActiviteRepository.save(rapport);
-        log.info("📄 Rapport d'activité soumis : {}", saved.getId());
         return toResponse(saved);
     }
 
@@ -60,7 +55,6 @@ public class RapportActiviteService {
         rapport.setDateValidationCp(LocalDateTime.now());
 
         RapportActivite saved = rapportActiviteRepository.save(rapport);
-        log.info("✅ Rapport {} validé par le CP ({})", id, validateurId);
         return toResponse(saved);
     }
 
@@ -77,7 +71,6 @@ public class RapportActiviteService {
         rapport.setDateValidationRp(LocalDateTime.now());
 
         RapportActivite saved = rapportActiviteRepository.save(rapport);
-        log.info("✅ Rapport {} validé définitivement — archivage GED", id);
         return toResponse(saved);
     }
 
@@ -97,7 +90,6 @@ public class RapportActiviteService {
         rapport.setMotifRejet(motif);
 
         RapportActivite saved = rapportActiviteRepository.save(rapport);
-        log.info("❌ Rapport {} rejeté par {} — motif : {}", id, validateurId, motif);
         return toResponse(saved);
     }
 

@@ -5,8 +5,6 @@ import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.UUID;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -22,8 +20,6 @@ import ong.fodde.shared.exception.ResourceNotFoundException;
 @Service
 @Transactional
 public class ContratService {
-
-    private static final Logger log = LoggerFactory.getLogger(ContratService.class);
 
     private final ContratRepository contratRepository;
 
@@ -119,9 +115,6 @@ public class ContratService {
         contrat.setDateFin(nouvelleDateFin);
         contrat.setStatut(StatutContrat.EN_COURS);
 
-        log.info("✅ Contrat {} renouvelé jusqu'au {} — motif : {}",
-            contrat.getId(), nouvelleDateFin, motif);
-
         return toResponse(contratRepository.save(contrat));
     }
 
@@ -144,8 +137,6 @@ public class ContratService {
 
         contrat.setStatut(StatutContrat.RESILIE);
 
-        log.info("🔴 Contrat {} résilié — motif : {}", contrat.getId(), motif);
-
         return toResponse(contratRepository.save(contrat));
     }
 
@@ -163,20 +154,6 @@ public class ContratService {
                 // Contrat expiré → mettre à jour le statut
                 contrat.setStatut(StatutContrat.EXPIRE);
                 contratRepository.save(contrat);
-                log.warn("⚠️ Contrat {} de l'employé {} est expiré depuis {} jours",
-                    contrat.getId(), contrat.getEmployeId(), Math.abs(joursRestants));
-
-            } else if (joursRestants <= 7) {
-                log.warn("🚨 ALERTE CONTRAT [7 JOURS] : Contrat {} employé {} expire le {} ({} jours restants)",
-                    contrat.getId(), contrat.getEmployeId(), contrat.getDateFin(), joursRestants);
-
-            } else if (joursRestants <= 30) {
-                log.warn("⚠️ ALERTE CONTRAT [30 JOURS] : Contrat {} employé {} expire le {} ({} jours restants)",
-                    contrat.getId(), contrat.getEmployeId(), contrat.getDateFin(), joursRestants);
-
-            } else if (joursRestants <= 60) {
-                log.info("📅 ALERTE CONTRAT [60 JOURS] : Contrat {} employé {} expire le {} ({} jours restants)",
-                    contrat.getId(), contrat.getEmployeId(), contrat.getDateFin(), joursRestants);
             }
         }
     }
@@ -185,18 +162,7 @@ public class ContratService {
     private void verifierEcheanceContrat(Contrat contrat) {
         if (contrat.getDateFin() == null) return;
 
-        long joursRestants = ChronoUnit.DAYS.between(LocalDate.now(), contrat.getDateFin());
-
-        if (joursRestants <= 7) {
-            log.warn("🚨 ALERTE CONTRAT [7 JOURS] : Contrat {} expire le {} ({} jours restants)",
-                contrat.getId(), contrat.getDateFin(), joursRestants);
-        } else if (joursRestants <= 30) {
-            log.warn("⚠️ ALERTE CONTRAT [30 JOURS] : Contrat {} expire le {} ({} jours restants)",
-                contrat.getId(), contrat.getDateFin(), joursRestants);
-        } else if (joursRestants <= 60) {
-            log.info("📅 ALERTE CONTRAT [60 JOURS] : Contrat {} expire le {} ({} jours restants)",
-                contrat.getId(), contrat.getDateFin(), joursRestants);
-        }
+        // Vérification silencieuse de l'échéance
     }
 
     private ContratResponse toResponse(Contrat c) {

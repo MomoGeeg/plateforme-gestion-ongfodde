@@ -37,8 +37,6 @@ public class JwtAuthFilter extends OncePerRequestFilter {
     ) throws ServletException, IOException {
 
         final String authHeader = request.getHeader("Authorization");
-        System.out.println("=== REQUEST : " + request.getMethod() + " " + request.getRequestURI());
-        System.out.println("=== AUTH HEADER : " + authHeader);
 
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
             filterChain.doFilter(request, response);
@@ -62,12 +60,11 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                     authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
 
                     SecurityContextHolder.getContext().setAuthentication(authToken);
-                    //System.out.println("=== AUTH OK : " + email + " | Roles : " + authorities);
                 }
             }
         } catch (Exception e) {
             // Token invalide — on continue sans authentification
-            logger.debug("Token JWT invalide : " + e.getMessage());
+            // Token invalide
         }
 
         filterChain.doFilter(request, response);

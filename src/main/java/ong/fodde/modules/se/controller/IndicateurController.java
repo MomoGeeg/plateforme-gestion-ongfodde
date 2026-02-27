@@ -34,11 +34,6 @@ public class IndicateurController {
     @PostMapping
     @PreAuthorize("hasAuthority('ROLE_SE') or hasAuthority('ROLE_ADMIN')")
     public ResponseEntity<IndicateurResponse> creerIndicateur(@Valid @RequestBody IndicateurRequest request) {
-      // DEBUG TEMPORAIRE
-        var auth = org.springframework.security.core.context.SecurityContextHolder
-                      .getContext().getAuthentication();
-        System.out.println("=== INDICATEUR AUTH : " + auth);
-        System.out.println("=== AUTHORITIES : " + auth.getAuthorities());
         IndicateurResponse response = indicateurService.creerIndicateur(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }

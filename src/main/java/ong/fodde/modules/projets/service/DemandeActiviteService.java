@@ -4,8 +4,6 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -23,8 +21,6 @@ import ong.fodde.shared.exception.ResourceNotFoundException;
 @Service
 @Transactional
 public class DemandeActiviteService {
-
-    private static final Logger log = LoggerFactory.getLogger(DemandeActiviteService.class);
 
     private final DemandeActiviteRepository demandeActiviteRepository;
     private final ActiviteRepository activiteRepository;
@@ -48,7 +44,6 @@ public class DemandeActiviteService {
         demande.setStatut(StatutDemandeActivite.EN_ATTENTE);
 
         DemandeActivite saved = demandeActiviteRepository.save(demande);
-        log.info("📋 Demande d'activité soumise : {}", saved.getId());
         return toResponse(saved);
     }
 
@@ -65,7 +60,6 @@ public class DemandeActiviteService {
         demande.setDateValidationCp(LocalDateTime.now());
 
         DemandeActivite saved = demandeActiviteRepository.save(demande);
-        log.info("✅ Demande {} validée par le CP ({})", id, validateurId);
         return toResponse(saved);
     }
 
@@ -82,7 +76,6 @@ public class DemandeActiviteService {
         demande.setDateValidationRp(LocalDateTime.now());
 
         DemandeActivite saved = demandeActiviteRepository.save(demande);
-        log.info("✅ Demande {} validée par le RP ({})", id, validateurId);
         return toResponse(saved);
     }
 
@@ -113,7 +106,6 @@ public class DemandeActiviteService {
         demande.setActiviteCreeeId(activiteSaved.getId());
 
         DemandeActivite saved = demandeActiviteRepository.save(demande);
-        log.info("✅ Demande approuvée — Activité créée automatiquement : {}", activiteSaved.getId());
         return toResponse(saved);
     }
 
@@ -129,7 +121,6 @@ public class DemandeActiviteService {
         demande.setMotifRejet(motif);
 
         DemandeActivite saved = demandeActiviteRepository.save(demande);
-        log.info("❌ Demande {} rejetée — motif : {}", id, motif);
         return toResponse(saved);
     }
 
