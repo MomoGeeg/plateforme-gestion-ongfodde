@@ -1,5 +1,6 @@
 package ong.fodde.modules.financier.controller;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -73,5 +74,12 @@ public class DepenseController {
             @RequestParam String motif,
             @RequestParam UUID userId) {
         return ResponseEntity.ok(depenseService.annulerDepense(id, motif, userId));
+    }
+
+    @GetMapping("/stats/mois-courant")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<Map<String, BigDecimal>> statsMoisCourant() {
+        BigDecimal total = depenseService.totalDepensesMoisCourant();
+        return ResponseEntity.ok(Map.of("total", total));
     }
 }

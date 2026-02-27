@@ -170,6 +170,14 @@ public class DepenseService {
             .toList();
     }
 
+    @Transactional(readOnly = true)
+    public BigDecimal totalDepensesMoisCourant() {
+        LocalDate debut = LocalDate.now().withDayOfMonth(1);
+        LocalDate fin = LocalDate.now().withDayOfMonth(LocalDate.now().lengthOfMonth());
+        BigDecimal total = depenseRepository.sumByPeriode(debut, fin);
+        return total != null ? total : BigDecimal.ZERO;
+    }
+
     private String genererNumeroPiece() {
         int annee = LocalDate.now().getYear();
         compteurDepense++;
