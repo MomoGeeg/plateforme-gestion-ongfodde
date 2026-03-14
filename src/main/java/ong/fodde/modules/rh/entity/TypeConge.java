@@ -6,5 +6,6 @@ public enum TypeConge {
     MATERNITE,
     PATERNITE,
     SANS_SOLDE,
-    EXCEPTIONNEL
+    RECUPERATION,
+    MISSION
 }

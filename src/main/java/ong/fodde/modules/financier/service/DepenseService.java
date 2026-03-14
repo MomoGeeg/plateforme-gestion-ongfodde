@@ -2,6 +2,7 @@ package ong.fodde.modules.financier.service;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -10,6 +11,7 @@ import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import ong.fodde.modules.auth.repository.UserRepository;
 import ong.fodde.modules.financier.dto.DepenseRequest;
 import ong.fodde.modules.financier.dto.DepenseResponse;
 import ong.fodde.modules.financier.entity.Depense;
@@ -30,12 +32,13 @@ public class DepenseService {
     private final DepenseRepository depenseRepository;
     private final LigneBudgetaireRepository ligneBudgetaireRepository;
     private final ProjetRepository projetRepository;
+    private final UserRepository userRepository;
 
     /** Transitions de statut autorisées pour les dépenses */
     private static final Map<StatutDepense, Set<StatutDepense>> TRANSITIONS = Map.of(
         StatutDepense.BROUILLON,          Set.of(StatutDepense.SOUMISE, StatutDepense.ANNULEE),
         StatutDepense.SOUMISE,            Set.of(StatutDepense.VERIFIEE, StatutDepense.REJETEE),
-        StatutDepense.VERIFIEE,           Set.of(StatutDepense.EN_APPROBATION_SE, StatutDepense.REJETEE),
+        StatutDepense.VERIFIEE,           Set.of(StatutDepense.VALIDEE, StatutDepense.EN_APPROBATION_SE, StatutDepense.REJETEE),
         StatutDepense.EN_APPROBATION_SE,  Set.of(StatutDepense.VALIDEE, StatutDepense.REJETEE),
         StatutDepense.VALIDEE,            Set.of(),
         StatutDepense.REJETEE,            Set.of(StatutDepense.BROUILLON),
@@ -43,13 +46,16 @@ public class DepenseService {
     );
 
     private long compteurDepense = 0;
+    private int anneeCompteur = 0;
 
     public DepenseService(DepenseRepository depenseRepository,
                            LigneBudgetaireRepository ligneBudgetaireRepository,
-                           ProjetRepository projetRepository) {
+                           ProjetRepository projetRepository,
+                           UserRepository userRepository) {
         this.depenseRepository = depenseRepository;
         this.ligneBudgetaireRepository = ligneBudgetaireRepository;
         this.projetRepository = projetRepository;
+        this.userRepository = userRepository;
     }
 
     public DepenseResponse soumettreDepense(DepenseRequest request, UUID userId) {
@@ -104,6 +110,14 @@ public class DepenseService {
     }
 
     @Transactional(readOnly = true)
+    public List<DepenseResponse> listerToutesDepenses(StatutDepense statut) {
+        return depenseRepository.findAll().stream()
+            .filter(d -> statut == null || d.getStatut() == statut)
+            .map(this::toResponse)
+            .toList();
+    }
+
+    @Transactional(readOnly = true)
     public List<DepenseResponse> listerDepenses(UUID projetId) {
         return depenseRepository.findByProjetId(projetId).stream()
             .map(this::toResponse)
@@ -149,12 +163,6 @@ public class DepenseService {
             BigDecimal montantDepenseActuel = ligne.getMontantDepense() != null ? ligne.getMontantDepense() : BigDecimal.ZERO;
             ligne.setMontantDepense(montantDepenseActuel.add(depense.getMontant()));
             ligneBudgetaireRepository.save(ligne);
-            BigDecimal taux = ligne.getMontantPrevu().compareTo(BigDecimal.ZERO) > 0
-                ? montantDepenseActuel.add(depense.getMontant())
-                    .multiply(BigDecimal.valueOf(100))
-                    .divide(ligne.getMontantPrevu(), 2, java.math.RoundingMode.HALF_UP)
-                : BigDecimal.ZERO;
-
         }
 
         return toResponse(saved);
@@ -177,8 +185,20 @@ public class DepenseService {
 
     private String genererNumeroPiece() {
         int annee = LocalDate.now().getYear();
+        // Réinitialiser depuis la DB si premier appel ou changement d'année
+        if (anneeCompteur != annee) {
+            compteurDepense = depenseRepository.findMaxSequenceForYear(annee);
+            anneeCompteur = annee;
+        }
         compteurDepense++;
         return String.format("DEP-%d-%06d", annee, compteurDepense);
+    }
+
+    @Transactional(readOnly = true)
+    public DepenseResponse getDepenseById(UUID id) {
+        Depense depense = depenseRepository.findById(id)
+            .orElseThrow(() -> new ResourceNotFoundException("Dépense introuvable : " + id));
+        return toResponse(depense);
     }
 
     public DepenseResponse annulerDepense(UUID id, String motif, UUID userId) {
@@ -203,11 +223,35 @@ public class DepenseService {
     }
 
     private DepenseResponse toResponse(Depense depense) {
+        // Enrichissement : ligne budgétaire
+        LigneBudgetaire ligne = ligneBudgetaireRepository.findById(depense.getLigneBudgetaireId()).orElse(null);
+        String ligneCode     = ligne != null ? ligne.getCode()    : null;
+        String ligneIntitule = ligne != null ? ligne.getIntitule() : null;
+
+        // Enrichissement : projet
+        Projet projet = projetRepository.findById(depense.getProjetId()).orElse(null);
+        String projetCode  = projet != null ? projet.getCode()  : null;
+        String projetTitre = projet != null ? projet.getTitre() : null;
+
+        // Enrichissement : auteur
+        String saisiParNom = userRepository.findById(depense.getSaisiParId())
+            .map(u -> u.getPrenom() + " " + u.getNom())
+            .orElse(null);
+
+        // Jours d'attente depuis la date de dépense
+        long joursAttente = depense.getDateDepense() != null
+            ? ChronoUnit.DAYS.between(depense.getDateDepense(), LocalDate.now())
+            : 0;
+
         return new DepenseResponse(
             depense.getId(),
             depense.getNumeroPiece(),
             depense.getLigneBudgetaireId(),
+            ligneCode,
+            ligneIntitule,
             depense.getProjetId(),
+            projetCode,
+            projetTitre,
             depense.getLibelle(),
             depense.getMontant(),
             depense.getDevise(),
@@ -216,6 +260,9 @@ public class DepenseService {
             depense.getDateDepense(),
             depense.getStatut(),
             depense.getSaisiParId(),
+            saisiParNom,
+            depense.getMotifRejet(),
+            joursAttente,
             depense.getCreatedAt()
         );
     }

@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -35,7 +36,7 @@ public class ProjetController {
     }
 
     @PostMapping
-    @PreAuthorize("hasAuthority('ROLE_RAF') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('ROLE_RESPONSABLE_PROGRAMMES') or hasAuthority('ROLE_RAF') or hasAuthority('ROLE_ADMIN')")
     public ResponseEntity<ProjetResponse> creerProjet(@Valid @RequestBody ProjetRequest request) {
         ProjetResponse response = projetService.creerProjet(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
@@ -53,8 +54,14 @@ public class ProjetController {
         return ResponseEntity.ok(projetService.obtenirProjet(id));
     }
 
+    @PutMapping("/{id}")
+    @PreAuthorize("hasAuthority('ROLE_RESPONSABLE_PROGRAMMES') or hasAuthority('ROLE_RAF') or hasAuthority('ROLE_ADMIN')")
+    public ResponseEntity<ProjetResponse> modifierProjet(@PathVariable UUID id, @Valid @RequestBody ProjetRequest request) {
+        return ResponseEntity.ok(projetService.modifierProjet(id, request));
+    }
+
     @PatchMapping("/{id}/statut")
-    @PreAuthorize("hasAuthority('ROLE_SECRETAIRE_EXECUTIF') or hasAuthority('ROLE_RESPONSABLE_PROGRAMMES') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('ROLE_SE') or hasAuthority('ROLE_RESPONSABLE_PROGRAMMES') or hasAuthority('ROLE_ADMIN')")
     public ResponseEntity<ProjetResponse> changerStatut(
             @PathVariable UUID id,
             @RequestBody Map<String, String> body) {
@@ -89,7 +96,7 @@ public class ProjetController {
 
     // Prolonger la date de fin
     @PatchMapping("/{id}/prolonger")
-    @PreAuthorize("hasAuthority('ROLE_SECRETAIRE_EXECUTIF') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('ROLE_SE') or hasAuthority('ROLE_ADMIN')")
     public ResponseEntity<ProjetResponse> prolongerDateFin(
             @PathVariable UUID id,
             @RequestParam LocalDate nouvelleDateFin,

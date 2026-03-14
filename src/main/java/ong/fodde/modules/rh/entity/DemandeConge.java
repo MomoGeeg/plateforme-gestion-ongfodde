@@ -13,9 +13,11 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import ong.fodde.shared.entity.BaseEntity;
+import org.hibernate.annotations.DynamicUpdate;
 
 @Entity
 @Table(name = "demandes_conge")
+@DynamicUpdate
 @Getter
 @Setter
 @NoArgsConstructor
@@ -41,17 +43,11 @@ public class DemandeConge extends BaseEntity {
     @Column(name = "statut", nullable = false, columnDefinition = "statut_conge")
     private StatutConge statut = StatutConge.EN_ATTENTE;
 
-    @Column(name = "valide_par_n1", columnDefinition = "uuid")
-    private UUID valideParN1;
+    @Column(name = "valide_par_raf", columnDefinition = "uuid")
+    private UUID valideParRaf;
 
-    @Column(name = "valide_par_rh", columnDefinition = "uuid")
-    private UUID valideParRh;
-
-    @Column(name = "date_validation_n1")
-    private LocalDateTime dateValidationN1;
-
-    @Column(name = "date_validation_rh")
-    private LocalDateTime dateValidationRh;
+    @Column(name = "date_validation_raf")
+    private LocalDateTime dateValidationRaf;
 
     @Column(name = "justificatif_url")
     private String justificatifUrl;

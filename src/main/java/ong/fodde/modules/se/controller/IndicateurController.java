@@ -32,10 +32,16 @@ public class IndicateurController {
     }
 
     @PostMapping
-    @PreAuthorize("hasAuthority('ROLE_SE') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('ROLE_RESPONSABLE_SE') or hasAuthority('ROLE_SE') or hasAuthority('ROLE_ADMIN')")
     public ResponseEntity<IndicateurResponse> creerIndicateur(@Valid @RequestBody IndicateurRequest request) {
         IndicateurResponse response = indicateurService.creerIndicateur(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    @GetMapping
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<List<IndicateurResponse>> listerTousIndicateurs() {
+        return ResponseEntity.ok(indicateurService.listerTousIndicateurs());
     }
 
     @GetMapping("/projet/{projetId}")
@@ -51,7 +57,7 @@ public class IndicateurController {
     }
 
     @PatchMapping("/{id}/valeur")
-    @PreAuthorize("hasAuthority('ROLE_SE') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('ROLE_RESPONSABLE_SE') or hasAuthority('ROLE_SE') or hasAuthority('ROLE_ADMIN')")
     public ResponseEntity<IndicateurResponse> mettreAJourValeur(
             @PathVariable UUID id,
             @RequestBody Map<String, BigDecimal> body) {

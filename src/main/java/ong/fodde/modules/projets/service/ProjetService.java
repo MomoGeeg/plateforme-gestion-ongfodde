@@ -83,6 +83,33 @@ public class ProjetService {
         return toResponse(saved);
     }
 
+    public ProjetResponse modifierProjet(UUID id, ProjetRequest request) {
+        Projet projet = projetRepository.findById(id)
+            .orElseThrow(() -> new ResourceNotFoundException("Projet introuvable avec l'identifiant : " + id));
+
+        // Seuls les projets BROUILLON ou EN_VALIDATION peuvent être modifiés
+        if (projet.getStatut() != StatutProjet.BROUILLON && projet.getStatut() != StatutProjet.EN_VALIDATION) {
+            throw new BusinessException("Seuls les projets en statut BROUILLON ou EN_VALIDATION peuvent être modifiés");
+        }
+
+        if (request.dateFin().isBefore(request.dateDebut())) {
+            throw new BusinessException("La date de fin ne peut pas être antérieure à la date de début");
+        }
+
+        projet.setTitre(request.titre());
+        projet.setDescription(request.description());
+        projet.setObjectifGeneral(request.objectifGeneral());
+        projet.setZoneGeographique(request.zoneGeographique());
+        projet.setDateDebut(request.dateDebut());
+        projet.setDateFin(request.dateFin());
+        projet.setBudgetTotal(request.budgetTotal());
+        projet.setDevise(request.devise() != null ? request.devise() : Devise.XOF);
+        projet.setResponsableId(request.responsableId());
+
+        Projet saved = projetRepository.save(projet);
+        return toResponse(saved);
+    }
+
     @Transactional(readOnly = true)
     public List<ProjetResponse> listerProjets() {
         return projetRepository.findAll().stream()

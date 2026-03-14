@@ -36,6 +36,12 @@ public class EvaluationController {
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
+    @GetMapping
+    @PreAuthorize("hasAuthority('ROLE_RH') or hasAuthority('ROLE_ADMIN')")
+    public ResponseEntity<List<EvaluationResponse>> listerTous() {
+        return ResponseEntity.ok(evaluationService.listerTous());
+    }
+
     @GetMapping("/employe/{employeId}")
     @PreAuthorize("hasAuthority('ROLE_RH') or hasAuthority('ROLE_ADMIN') or isAuthenticated()")
     public ResponseEntity<List<EvaluationResponse>> listerEvaluationsEmploye(@PathVariable UUID employeId) {

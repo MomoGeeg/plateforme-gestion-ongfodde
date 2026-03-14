@@ -5,6 +5,7 @@ import java.time.LocalDateTime;
 import java.util.UUID;
 
 import ong.fodde.modules.rh.entity.StatutEmploye;
+import ong.fodde.modules.rh.entity.TypeContrat;
 
 public record EmployeResponse(
         UUID id,
@@ -22,6 +23,10 @@ public record EmployeResponse(
         LocalDate dateEmbauche,
         StatutEmploye statut,
         UUID superviseurId,
-        LocalDateTime createdAt
+        LocalDateTime createdAt,
+        // Enrichi depuis le contrat actif (peut être null)
+        TypeContrat typeContrat,
+        LocalDate dateFinContrat,
+        Integer soldeConges
 ) {
 }

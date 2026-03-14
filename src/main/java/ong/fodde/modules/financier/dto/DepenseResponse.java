@@ -13,7 +13,11 @@ public record DepenseResponse(
     UUID id,
     String numeroPiece,
     UUID ligneBudgetaireId,
+    String ligneBudgetaireCode,
+    String ligneBudgetaireIntitule,
     UUID projetId,
+    String projetCode,
+    String projetTitre,
     String libelle,
     BigDecimal montant,
     Devise devise,
@@ -22,5 +26,8 @@ public record DepenseResponse(
     LocalDate dateDepense,
     StatutDepense statut,
     UUID saisiParId,
+    String saisiParNom,
+    String motifRejet,
+    long joursAttente,
     LocalDateTime createdAt
 ) {}

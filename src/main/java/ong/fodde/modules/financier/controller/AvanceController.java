@@ -32,6 +32,13 @@ public class AvanceController {
         this.avanceService = avanceService;
     }
 
+    @GetMapping
+    @PreAuthorize("hasAuthority('ROLE_RAF') or hasAuthority('ROLE_SE') or hasAuthority('ROLE_ADMIN')")
+    public ResponseEntity<List<AvanceResponse>> listerToutesAvances(
+            @RequestParam(required = false) Boolean justifiee) {
+        return ResponseEntity.ok(avanceService.listerToutesAvances(justifiee));
+    }
+
     @PostMapping
     @PreAuthorize("hasAuthority('ROLE_RAF') or hasAuthority('ROLE_ADMIN')")
     public ResponseEntity<AvanceResponse> creerAvance(@Valid @RequestBody AvanceRequest request) {

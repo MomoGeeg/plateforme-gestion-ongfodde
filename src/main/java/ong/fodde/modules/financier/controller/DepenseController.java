@@ -33,9 +33,15 @@ public class DepenseController {
         this.depenseService = depenseService;
     }
 
+    @GetMapping
+    @PreAuthorize("hasAuthority('ROLE_SE') or hasAuthority('ROLE_RAF') or hasAuthority('ROLE_ADMIN')")
+    public ResponseEntity<List<DepenseResponse>> listerToutesDepenses(
+            @RequestParam(required = false) StatutDepense statut) {
+        return ResponseEntity.ok(depenseService.listerToutesDepenses(statut));
+    }
+
     @PostMapping
     @PreAuthorize("hasAuthority('ROLE_RAF') or hasAuthority('ROLE_COMPTABLE') or hasAuthority('ROLE_ADMIN')")
-
     public ResponseEntity<DepenseResponse> soumettreDepense(
             @Valid @RequestBody DepenseRequest request,
             @RequestParam UUID userId) {
@@ -50,7 +56,7 @@ public class DepenseController {
     }
 
     @PatchMapping("/{id}/statut")
-    @PreAuthorize("hasAuthority('ROLE_RAF') or hasAuthority('ROLE_SE') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('ROLE_RAF') or hasAuthority('ROLE_SE') or hasAuthority('ROLE_ADMIN') or hasAuthority('ROLE_COMPTABLE')")
 
     public ResponseEntity<DepenseResponse> changerStatut(
             @PathVariable UUID id,
@@ -61,6 +67,12 @@ public class DepenseController {
         return ResponseEntity.ok(depenseService.changerStatut(id, nouveauStatut, userId, motif));
     }
 
+    @GetMapping("/{id}")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<DepenseResponse> getDepense(@PathVariable UUID id) {
+        return ResponseEntity.ok(depenseService.getDepenseById(id));
+    }
+
     @GetMapping("/mes-depenses")
     @PreAuthorize("isAuthenticated()")
     public ResponseEntity<List<DepenseResponse>> mesDepenses(@RequestParam UUID userId) {
@@ -68,7 +80,7 @@ public class DepenseController {
     }
 
     @PatchMapping("/{id}/annuler")
-    @PreAuthorize("hasAuthority('ROLE_RAF') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('ROLE_RAF') or hasAuthority('ROLE_ADMIN') or hasAuthority('ROLE_COMPTABLE')")
     public ResponseEntity<DepenseResponse> annulerDepense(
             @PathVariable UUID id,
             @RequestParam String motif,

@@ -68,10 +68,43 @@ public class FormulaireService {
     }
 
     @Transactional(readOnly = true)
+    public List<FormulaireResponse> listerTousFormulaires() {
+        return formulaireRepository.findAll().stream()
+            .map(this::toFormulaireResponse)
+            .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public FormulaireResponse obtenirFormulaire(UUID id) {
+        FormulaireCollecte formulaire = formulaireRepository.findById(id)
+            .orElseThrow(() -> new ResourceNotFoundException("Formulaire introuvable avec l'identifiant : " + id));
+        return toFormulaireResponse(formulaire);
+    }
+
+    @Transactional(readOnly = true)
     public List<FormulaireResponse> listerFormulaires(UUID projetId) {
         return formulaireRepository.findByProjetId(projetId).stream()
             .map(this::toFormulaireResponse)
             .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<DonneeCollecteeResponse> listerReponses(UUID formulaireId) {
+        return donneeRepository.findByFormulaireId(formulaireId).stream()
+            .map(this::toDonneeResponse)
+            .toList();
+    }
+
+    public FormulaireResponse cloturerFormulaire(UUID id) {
+        FormulaireCollecte formulaire = formulaireRepository.findById(id)
+            .orElseThrow(() -> new ResourceNotFoundException("Formulaire introuvable avec l'identifiant : " + id));
+
+        if (formulaire.getStatut() == StatutFormulaire.ARCHIVE) {
+            throw new BusinessException("Ce formulaire est déjà archivé");
+        }
+        formulaire.setStatut(StatutFormulaire.FERME);
+        FormulaireCollecte saved = formulaireRepository.save(formulaire);
+        return toFormulaireResponse(saved);
     }
 
     public DonneeCollecteeResponse soumettreReponse(DonneeCollecteeRequest request, UUID collecteurId) {

@@ -10,13 +10,16 @@ import ong.fodde.modules.financier.entity.StatutAvance;
 public record AvanceResponse(
         UUID id,
         UUID beneficiaireId,
+        String beneficiaireNom,
         UUID projetId,
+        String projetCode,
         BigDecimal montant,
         String motif,
         StatutAvance statut,
         LocalDate dateOctroi,
         LocalDate dateJustification,
         BigDecimal montantJustifie,
+        long joursEcoules,
         LocalDateTime createdAt
 ) {
 }

@@ -31,30 +31,22 @@ public class DemandeCongeController {
     }
 
     @PostMapping
-    @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<DemandeCongeResponse> soumettreDemande(@Valid @RequestBody DemandeCongeRequest request) {
-        DemandeCongeResponse response = demandeCongeService.soumettreDemande(request);
-        return ResponseEntity.status(HttpStatus.CREATED).body(response);
-    }
-
-    @PatchMapping("/{id}/valider-n1")
-    @PreAuthorize("hasAuthority('ROLE_RH') or hasAuthority('ROLE_ADMIN') or hasAuthority('ROLE_RESPONSABLE_PROGRAMMES')")
-    public ResponseEntity<DemandeCongeResponse> validerN1(@PathVariable UUID id,
-                                                           @RequestParam UUID validateurId) {
-        return ResponseEntity.ok(demandeCongeService.validerN1(id, validateurId));
-    }
-
-    @PatchMapping("/{id}/approuver-rh")
     @PreAuthorize("hasAuthority('ROLE_RH') or hasAuthority('ROLE_ADMIN')")
-    public ResponseEntity<DemandeCongeResponse> approuverRH(@PathVariable UUID id,
-                                                             @RequestParam UUID validateurId) {
-        return ResponseEntity.ok(demandeCongeService.approuverRH(id, validateurId));
+    public ResponseEntity<DemandeCongeResponse> soumettreDemande(@Valid @RequestBody DemandeCongeRequest request) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(demandeCongeService.soumettreDemande(request));
+    }
+
+    @PatchMapping("/{id}/approuver")
+    @PreAuthorize("hasAuthority('ROLE_RAF') or hasAuthority('ROLE_ADMIN')")
+    public ResponseEntity<DemandeCongeResponse> approuverRAF(@PathVariable UUID id,
+                                                              @RequestParam(required = false) UUID validateurId) {
+        return ResponseEntity.ok(demandeCongeService.approuverRAF(id, validateurId));
     }
 
     @PatchMapping("/{id}/rejeter")
-    @PreAuthorize("hasAuthority('ROLE_RH') or hasAuthority('ROLE_ADMIN') or hasAuthority('ROLE_RESPONSABLE_PROGRAMMES')")
+    @PreAuthorize("hasAuthority('ROLE_RAF') or hasAuthority('ROLE_ADMIN')")
     public ResponseEntity<DemandeCongeResponse> rejeter(@PathVariable UUID id,
-                                                         @RequestParam UUID validateurId,
+                                                         @RequestParam(required = false) UUID validateurId,
                                                          @RequestParam(required = false) String motif) {
         return ResponseEntity.ok(demandeCongeService.rejeter(id, validateurId, motif));
     }
@@ -65,6 +57,12 @@ public class DemandeCongeController {
         return ResponseEntity.ok(demandeCongeService.annuler(id));
     }
 
+    @GetMapping
+    @PreAuthorize("hasAuthority('ROLE_RH') or hasAuthority('ROLE_ADMIN') or hasAuthority('ROLE_RAF') or hasAuthority('ROLE_SE') or hasAuthority('ROLE_RESPONSABLE_PROGRAMMES')")
+    public ResponseEntity<List<DemandeCongeResponse>> listerTous() {
+        return ResponseEntity.ok(demandeCongeService.listerTous());
+    }
+
     @GetMapping("/mes-conges/{employeId}")
     @PreAuthorize("isAuthenticated()")
     public ResponseEntity<List<DemandeCongeResponse>> mesConges(@PathVariable UUID employeId) {
@@ -72,14 +70,8 @@ public class DemandeCongeController {
     }
 
     @GetMapping("/en-attente")
-    @PreAuthorize("hasAuthority('ROLE_RH') or hasAuthority('ROLE_ADMIN') or hasAuthority('ROLE_RESPONSABLE_PROGRAMMES')")
+    @PreAuthorize("hasAuthority('ROLE_RH') or hasAuthority('ROLE_ADMIN') or hasAuthority('ROLE_RAF') or hasAuthority('ROLE_SE') or hasAuthority('ROLE_RESPONSABLE_PROGRAMMES')")
     public ResponseEntity<List<DemandeCongeResponse>> congesEnAttente() {
         return ResponseEntity.ok(demandeCongeService.congesEnAttente());
-    }
-
-    @GetMapping("/valide-n1")
-    @PreAuthorize("hasAuthority('ROLE_RH') or hasAuthority('ROLE_ADMIN')")
-    public ResponseEntity<List<DemandeCongeResponse>> congesValideN1() {
-        return ResponseEntity.ok(demandeCongeService.congesValideN1());
     }
 }

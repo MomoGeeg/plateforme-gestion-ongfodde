@@ -26,9 +26,9 @@ public class LigneBudgetaire {
     @Column(name = "id", updatable = false, nullable = false, columnDefinition = "uuid")
     private UUID id;
 
-    @Column(name = "budget_id", nullable = false, columnDefinition = "uuid")
-    private UUID budgetId;
-    
+    @Column(name = "allocation_projet_id", nullable = false, columnDefinition = "uuid")
+    private UUID allocationProjetId;
+
 
     @Column(name = "code", length = 20, nullable = false)
     private String code;

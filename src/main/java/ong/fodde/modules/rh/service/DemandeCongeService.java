@@ -53,6 +53,7 @@ public class DemandeCongeService {
         demande.setDateDebut(request.dateDebut());
         demande.setDateFin(request.dateFin());
         demande.setMotif(request.motif());
+        demande.setJustificatifUrl(request.justificatifUrl());
         demande.setStatut(StatutConge.EN_ATTENTE);
         demande.setNbJours(nbJours);
 
@@ -60,33 +61,17 @@ public class DemandeCongeService {
         return toResponse(saved);
     }
 
-    public DemandeCongeResponse validerN1(UUID id, UUID validateurId) {
+    public DemandeCongeResponse approuverRAF(UUID id, UUID validateurId) {
         DemandeConge demande = demandeCongeRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Demande de congé non trouvée avec l'id : " + id));
 
         if (demande.getStatut() != StatutConge.EN_ATTENTE) {
-            throw new BusinessException("Seules les demandes en attente peuvent être validées au niveau N+1");
-        }
-
-        demande.setStatut(StatutConge.VALIDE_N1);
-        demande.setValideParN1(validateurId);
-        demande.setDateValidationN1(LocalDateTime.now());
-
-        DemandeConge saved = demandeCongeRepository.save(demande);
-        return toResponse(saved);
-    }
-
-    public DemandeCongeResponse approuverRH(UUID id, UUID validateurId) {
-        DemandeConge demande = demandeCongeRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Demande de congé non trouvée avec l'id : " + id));
-
-        if (demande.getStatut() != StatutConge.VALIDE_N1) {
-            throw new BusinessException("Seules les demandes validées N+1 peuvent être approuvées par les RH");
+            throw new BusinessException("Seules les demandes en attente peuvent être approuvées");
         }
 
         demande.setStatut(StatutConge.APPROUVE);
-        demande.setValideParRh(validateurId);
-        demande.setDateValidationRh(LocalDateTime.now());
+        demande.setValideParRaf(validateurId);
+        demande.setDateValidationRaf(LocalDateTime.now());
 
         if (demande.getTypeConge() == TypeConge.ANNUEL && demande.getNbJours() != null) {
             Employe employe = employeRepository.findById(demande.getEmployeId())
@@ -97,23 +82,23 @@ public class DemandeCongeService {
             employeRepository.save(employe);
         }
 
-        DemandeConge saved = demandeCongeRepository.save(demande);
-        return toResponse(saved);
+        demandeCongeRepository.save(demande);
+        return toResponse(demande);
     }
 
     public DemandeCongeResponse rejeter(UUID id, UUID validateurId, String motif) {
         DemandeConge demande = demandeCongeRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Demande de congé non trouvée avec l'id : " + id));
 
-        if (demande.getStatut() != StatutConge.EN_ATTENTE && demande.getStatut() != StatutConge.VALIDE_N1) {
-            throw new BusinessException("Seules les demandes en attente ou validées N+1 peuvent être rejetées");
+        if (demande.getStatut() != StatutConge.EN_ATTENTE) {
+            throw new BusinessException("Seules les demandes en attente peuvent être rejetées");
         }
 
         demande.setStatut(StatutConge.REJETE);
         demande.setMotifRejet(motif);
 
-        DemandeConge saved = demandeCongeRepository.save(demande);
-        return toResponse(saved);
+        demandeCongeRepository.save(demande);
+        return toResponse(demande);
     }
 
     public DemandeCongeResponse annuler(UUID id) {
@@ -126,8 +111,8 @@ public class DemandeCongeService {
 
         demande.setStatut(StatutConge.ANNULE);
 
-        DemandeConge saved = demandeCongeRepository.save(demande);
-        return toResponse(saved);
+        demandeCongeRepository.save(demande);
+        return toResponse(demande);
     }
 
     @Transactional(readOnly = true)
@@ -138,15 +123,15 @@ public class DemandeCongeService {
     }
 
     @Transactional(readOnly = true)
-    public List<DemandeCongeResponse> congesEnAttente() {
-        return demandeCongeRepository.findByStatut(StatutConge.EN_ATTENTE).stream()
+    public List<DemandeCongeResponse> listerTous() {
+        return demandeCongeRepository.findAll().stream()
                 .map(this::toResponse)
                 .toList();
     }
 
     @Transactional(readOnly = true)
-    public List<DemandeCongeResponse> congesValideN1() {
-        return demandeCongeRepository.findByStatut(StatutConge.VALIDE_N1).stream()
+    public List<DemandeCongeResponse> congesEnAttente() {
+        return demandeCongeRepository.findByStatut(StatutConge.EN_ATTENTE).stream()
                 .map(this::toResponse)
                 .toList();
     }
@@ -160,10 +145,8 @@ public class DemandeCongeService {
                 d.getDateFin(),
                 d.getMotif(),
                 d.getStatut(),
-                d.getValideParN1(),
-                d.getValideParRh(),
-                d.getDateValidationN1(),
-                d.getDateValidationRh(),
+                d.getValideParRaf(),
+                d.getDateValidationRaf(),
                 d.getJustificatifUrl(),
                 d.getMotifRejet(),
                 d.getNbJours(),

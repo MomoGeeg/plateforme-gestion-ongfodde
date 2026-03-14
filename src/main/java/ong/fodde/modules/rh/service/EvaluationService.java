@@ -80,6 +80,13 @@ public class EvaluationService {
     }
 
     @Transactional(readOnly = true)
+    public List<EvaluationResponse> listerTous() {
+        return evaluationRepository.findAll().stream()
+                .map(this::toResponse)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
     public List<EvaluationResponse> listerEvaluationsEmploye(UUID employeId) {
         return evaluationRepository.findByEmployeId(employeId).stream()
                 .map(this::toResponse)

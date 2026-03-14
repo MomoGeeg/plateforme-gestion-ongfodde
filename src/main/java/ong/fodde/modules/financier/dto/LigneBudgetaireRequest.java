@@ -7,8 +7,8 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
 public record LigneBudgetaireRequest(
-    @NotNull(message = "L'identifiant du budget est obligatoire")
-    UUID budgetId,
+    @NotNull(message = "L'identifiant de l'allocation projet est obligatoire")
+    UUID allocationProjetId,
 
     @NotBlank(message = "Le code de la ligne budgétaire est obligatoire")
     String code,

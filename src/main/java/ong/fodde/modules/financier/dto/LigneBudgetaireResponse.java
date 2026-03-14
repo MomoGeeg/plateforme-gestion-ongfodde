@@ -5,7 +5,7 @@ import java.util.UUID;
 
 public record LigneBudgetaireResponse(
     UUID id,
-    UUID budgetId,
+    UUID allocationProjetId,
     String code,
     String intitule,
     String categorie,

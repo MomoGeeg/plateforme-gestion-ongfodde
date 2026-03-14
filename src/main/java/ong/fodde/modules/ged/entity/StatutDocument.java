@@ -4,6 +4,6 @@ public enum StatutDocument {
     BROUILLON,
     EN_VALIDATION,
     VALIDE,
-    ARCHIVE,
-    REJETE
+    REJETE,
+    ARCHIVE
 }

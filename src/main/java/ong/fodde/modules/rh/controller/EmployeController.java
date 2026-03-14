@@ -1,6 +1,7 @@
 package ong.fodde.modules.rh.controller;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import org.springframework.http.HttpStatus;
@@ -39,9 +40,15 @@ public class EmployeController {
     }
 
     @GetMapping
-    @PreAuthorize("hasAuthority('ROLE_RH') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('ROLE_RH') or hasAuthority('ROLE_ADMIN') or hasAuthority('ROLE_SE') or hasAuthority('ROLE_RAF') or hasAuthority('ROLE_COMPTABLE') or hasAuthority('ROLE_RESPONSABLE_PROGRAMMES')")
     public ResponseEntity<List<EmployeResponse>> listerEmployes() {
         return ResponseEntity.ok(employeService.listerEmployes());
+    }
+
+    @GetMapping("/sans-user")
+    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
+    public ResponseEntity<List<EmployeResponse>> listerEmployesSansCompte() {
+        return ResponseEntity.ok(employeService.listerEmployesSansCompte());
     }
 
     @GetMapping("/{id}")
@@ -55,5 +62,12 @@ public class EmployeController {
     public ResponseEntity<EmployeResponse> changerStatut(@PathVariable UUID id,
                                                           @RequestParam StatutEmploye statut) {
         return ResponseEntity.ok(employeService.changerStatut(id, statut));
+    }
+
+    @PatchMapping("/{id}/associer-compte")
+    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
+    public ResponseEntity<EmployeResponse> associerCompte(@PathVariable UUID id,
+                                                           @RequestBody Map<String, UUID> body) {
+        return ResponseEntity.ok(employeService.associerCompte(id, body.get("userId")));
     }
 }

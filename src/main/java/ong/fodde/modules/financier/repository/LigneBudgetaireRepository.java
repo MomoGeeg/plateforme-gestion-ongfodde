@@ -12,7 +12,7 @@ import ong.fodde.modules.financier.entity.LigneBudgetaire;
 @Repository
 public interface LigneBudgetaireRepository extends JpaRepository<LigneBudgetaire, UUID> {
 
-    List<LigneBudgetaire> findByBudgetId(UUID budgetId);
+    List<LigneBudgetaire> findByAllocationProjetId(UUID allocationProjetId);
 
-    Optional<LigneBudgetaire> findByBudgetIdAndCode(UUID budgetId, String code);
+    Optional<LigneBudgetaire> findByAllocationProjetIdAndCode(UUID allocationProjetId, String code);
 }

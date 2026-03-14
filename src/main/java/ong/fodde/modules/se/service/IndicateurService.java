@@ -65,6 +65,14 @@ public class IndicateurService {
     }
 
     @Transactional(readOnly = true)
+    public List<IndicateurResponse> listerTousIndicateurs() {
+        return indicateurRepository.findAll().stream()
+            .sorted((a, b) -> String.CASE_INSENSITIVE_ORDER.compare(a.getCode(), b.getCode()))
+            .map(this::toResponse)
+            .toList();
+    }
+
+    @Transactional(readOnly = true)
     public IndicateurResponse obtenirIndicateur(UUID id) {
         Indicateur indicateur = indicateurRepository.findById(id)
             .orElseThrow(() -> new ResourceNotFoundException("Indicateur introuvable avec l'identifiant : " + id));

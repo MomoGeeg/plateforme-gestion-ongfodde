@@ -47,7 +47,7 @@ public class Contrat extends BaseEntity {
 
     @Enumerated(EnumType.STRING)
     @Column(name = "statut", nullable = false, columnDefinition = "statut_contrat")
-    private StatutContrat statut = StatutContrat.EN_COURS;
+    private StatutContrat statut = StatutContrat.ACTIF;
 
     @Column(name = "document_url", columnDefinition = "text")
     private String documentUrl;

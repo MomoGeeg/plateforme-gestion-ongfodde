@@ -2,8 +2,7 @@ package ong.fodde.modules.rh.entity;
 
 public enum StatutEmploye {
     ACTIF,
-    INACTIF,
+    EN_CONGE,
     SUSPENDU,
-    DEMISSIONNE,
-    LICENCIE
+    PARTI
 }

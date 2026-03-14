@@ -32,7 +32,7 @@ public class ContratService {
         // Règle 1 : Date de fin obligatoire pour CDD, Consultant, Stagiaire
         if (request.typeContrat() == TypeContrat.CDD
                 || request.typeContrat() == TypeContrat.CONSULTANT
-                || request.typeContrat() == TypeContrat.STAGE) {
+                || request.typeContrat() == TypeContrat.STAGIAIRE) {
             if (request.dateFin() == null) {
                 throw new BusinessException(
                     "La date de fin est obligatoire pour un contrat de type " + request.typeContrat()
@@ -41,7 +41,7 @@ public class ContratService {
         }
 
         // Règle 2 : Un employé ne peut avoir qu'un seul contrat actif à la fois
-        contratRepository.findByEmployeIdAndStatut(request.employeId(), StatutContrat.EN_COURS)
+        contratRepository.findByEmployeIdAndStatut(request.employeId(), StatutContrat.ACTIF)
             .ifPresent(c -> {
                 throw new BusinessException(
                     "L'employé possède déjà un contrat actif (id : " + c.getId() + "). "
@@ -63,7 +63,7 @@ public class ContratService {
         contrat.setDevise(request.devise());
         contrat.setPoste(request.poste());
         contrat.setDocumentUrl(request.documentUrl());
-        contrat.setStatut(StatutContrat.EN_COURS);
+        contrat.setStatut(StatutContrat.ACTIF);
 
         Contrat saved = contratRepository.save(contrat);
 
@@ -82,7 +82,7 @@ public class ContratService {
 
     @Transactional(readOnly = true)
     public ContratResponse contratActif(UUID employeId) {
-        Contrat contrat = contratRepository.findByEmployeIdAndStatut(employeId, StatutContrat.EN_COURS)
+        Contrat contrat = contratRepository.findByEmployeIdAndStatut(employeId, StatutContrat.ACTIF)
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Aucun contrat actif trouvé pour l'employé : " + employeId));
         return toResponse(contrat);
@@ -93,10 +93,10 @@ public class ContratService {
         Contrat contrat = contratRepository.findById(id)
             .orElseThrow(() -> new ResourceNotFoundException("Contrat introuvable : " + id));
 
-        if (contrat.getStatut() != StatutContrat.EN_COURS
+        if (contrat.getStatut() != StatutContrat.ACTIF
                 && contrat.getStatut() != StatutContrat.EXPIRE) {
             throw new BusinessException(
-                "Seul un contrat EN_COURS ou EXPIRE peut être renouvelé"
+                "Seul un contrat ACTIF ou EXPIRE peut être renouvelé"
             );
         }
 
@@ -113,7 +113,7 @@ public class ContratService {
         }
 
         contrat.setDateFin(nouvelleDateFin);
-        contrat.setStatut(StatutContrat.EN_COURS);
+        contrat.setStatut(StatutContrat.ACTIF);
 
         return toResponse(contratRepository.save(contrat));
     }
@@ -142,7 +142,7 @@ public class ContratService {
 
     // Règle 7 : Vérification échéances — à appeler par @Scheduled
     public void verifierEcheancesContrats() {
-        List<Contrat> contratsActifs = contratRepository.findByStatut(StatutContrat.EN_COURS);
+        List<Contrat> contratsActifs = contratRepository.findByStatut(StatutContrat.ACTIF);
         LocalDate aujourdHui = LocalDate.now();
 
         for (Contrat contrat : contratsActifs) {

@@ -46,10 +46,34 @@ public class FormulaireController {
         return ResponseEntity.ok(formulaireService.publierFormulaire(id));
     }
 
+    @GetMapping
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<List<FormulaireResponse>> listerTousFormulaires() {
+        return ResponseEntity.ok(formulaireService.listerTousFormulaires());
+    }
+
+    @GetMapping("/{id}")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<FormulaireResponse> obtenirFormulaire(@PathVariable UUID id) {
+        return ResponseEntity.ok(formulaireService.obtenirFormulaire(id));
+    }
+
     @GetMapping("/projet/{projetId}")
     @PreAuthorize("isAuthenticated()")
     public ResponseEntity<List<FormulaireResponse>> listerFormulaires(@PathVariable UUID projetId) {
         return ResponseEntity.ok(formulaireService.listerFormulaires(projetId));
+    }
+
+    @GetMapping("/{id}/reponses")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<List<DonneeCollecteeResponse>> listerReponses(@PathVariable UUID id) {
+        return ResponseEntity.ok(formulaireService.listerReponses(id));
+    }
+
+    @PatchMapping("/{id}/cloturer")
+    @PreAuthorize("hasAuthority('ROLE_SE') or hasAuthority('ROLE_ADMIN')")
+    public ResponseEntity<FormulaireResponse> cloturerFormulaire(@PathVariable UUID id) {
+        return ResponseEntity.ok(formulaireService.cloturerFormulaire(id));
     }
 
     @PostMapping("/{id}/reponses")

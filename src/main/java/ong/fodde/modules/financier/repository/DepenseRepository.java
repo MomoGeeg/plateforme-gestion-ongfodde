@@ -26,4 +26,7 @@ public interface DepenseRepository extends JpaRepository<Depense, UUID> {
 
     @Query("SELECT COALESCE(SUM(d.montant), 0) FROM Depense d WHERE d.statut = 'VALIDEE' AND d.dateDepense >= :debut AND d.dateDepense <= :fin")
     BigDecimal sumByPeriode(@Param("debut") LocalDate debut, @Param("fin") LocalDate fin);
+
+    @Query(value = "SELECT COALESCE(MAX(CAST(SPLIT_PART(numero_piece, '-', 3) AS BIGINT)), 0) FROM depenses WHERE numero_piece LIKE CONCAT('DEP-', :annee, '-%')", nativeQuery = true)
+    long findMaxSequenceForYear(@Param("annee") int annee);
 }

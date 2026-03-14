@@ -19,6 +19,8 @@ public record DemandeCongeRequest(
         @NotNull(message = "La date de fin est obligatoire")
         LocalDate dateFin,
 
-        String motif
+        String motif,
+
+        String justificatifUrl
 ) {
 }
