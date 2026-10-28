@@ -1,0 +1,106 @@
+package ong.fodde.modules.projets.controller;
+
+import java.time.LocalDate;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+import jakarta.validation.Valid;
+import ong.fodde.modules.projets.dto.ProjetRequest;
+import ong.fodde.modules.projets.dto.ProjetResponse;
+import ong.fodde.modules.projets.entity.StatutProjet;
+import ong.fodde.modules.projets.service.ProjetService;
+
+@RestController
+@RequestMapping("/api/projets")
+public class ProjetController {
+
+    private final ProjetService projetService;
+
+    public ProjetController(ProjetService projetService) {
+        this.projetService = projetService;
+    }
+
+    @PostMapping
+    @PreAuthorize("hasAuthority('ROLE_RESPONSABLE_PROGRAMMES') or hasAuthority('ROLE_RAF') or hasAuthority('ROLE_ADMIN')")
+    public ResponseEntity<ProjetResponse> creerProjet(@Valid @RequestBody ProjetRequest request) {
+        ProjetResponse response = projetService.creerProjet(request);
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    @GetMapping
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<List<ProjetResponse>> listerProjets() {
+        return ResponseEntity.ok(projetService.listerProjets());
+    }
+
+    @GetMapping("/{id}")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<ProjetResponse> obtenirProjet(@PathVariable UUID id) {
+        return ResponseEntity.ok(projetService.obtenirProjet(id));
+    }
+
+    @PutMapping("/{id}")
+    @PreAuthorize("hasAuthority('ROLE_RESPONSABLE_PROGRAMMES') or hasAuthority('ROLE_RAF') or hasAuthority('ROLE_ADMIN')")
+    public ResponseEntity<ProjetResponse> modifierProjet(@PathVariable UUID id, @Valid @RequestBody ProjetRequest request) {
+        return ResponseEntity.ok(projetService.modifierProjet(id, request));
+    }
+
+    @PatchMapping("/{id}/statut")
+    @PreAuthorize("hasAuthority('ROLE_SE') or hasAuthority('ROLE_RESPONSABLE_PROGRAMMES') or hasAuthority('ROLE_ADMIN')")
+    public ResponseEntity<ProjetResponse> changerStatut(
+            @PathVariable UUID id,
+            @RequestBody Map<String, String> body) {
+        StatutProjet nouveauStatut = StatutProjet.valueOf(body.get("statut"));
+        UUID validateurId = body.get("validateurId") != null ? UUID.fromString(body.get("validateurId")) : null;
+        String commentaire = body.get("commentaire");
+        return ResponseEntity.ok(projetService.changerStatut(id, nouveauStatut, validateurId, commentaire));
+    }
+
+    @PostMapping("/{id}/equipe")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Void> ajouterMembre(
+            @PathVariable UUID id,
+            @RequestBody Map<String, UUID> body) {
+        projetService.ajouterMembreEquipe(id, body.get("userId"));
+        return ResponseEntity.ok().build();
+    }
+
+    @GetMapping("/mes-projets")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<List<ProjetResponse>> listerMesProjets(
+            @RequestBody Map<String, UUID> body) {
+        return ResponseEntity.ok(projetService.listerMesProjets(body.get("userId")));
+    }
+        // Retirer un membre de l'équipe
+    @DeleteMapping("/{projetId}/equipe/{userId}")
+    @PreAuthorize("hasAuthority('ROLE_RESPONSABLE_PROGRAMMES') or hasAuthority('ROLE_ADMIN')")
+    public ResponseEntity<Void> retirerMembre(@PathVariable UUID projetId, @PathVariable UUID userId) {
+        projetService.retirerMembreEquipe(projetId, userId);
+        return ResponseEntity.noContent().build();
+    }
+
+    // Prolonger la date de fin
+    @PatchMapping("/{id}/prolonger")
+    @PreAuthorize("hasAuthority('ROLE_SE') or hasAuthority('ROLE_ADMIN')")
+    public ResponseEntity<ProjetResponse> prolongerDateFin(
+            @PathVariable UUID id,
+            @RequestParam LocalDate nouvelleDateFin,
+            @RequestParam String justification) {
+        return ResponseEntity.ok(projetService.prolongerDateFin(id, nouvelleDateFin, justification));
+    }
+}

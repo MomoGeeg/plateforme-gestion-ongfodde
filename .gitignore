@@ -32,5 +32,6 @@ build/
 ### VS Code ###
 .vscode/
 
-### Sécurité — ne jamais commiter les données sensibles ###
-src/main/resources/application.properties
+### Sécurité — ne jamais commiter les secrets locaux ###
+src/main/resources/application-local.properties
+.env
