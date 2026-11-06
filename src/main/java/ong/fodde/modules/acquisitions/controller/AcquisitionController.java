@@ -50,7 +50,8 @@ public class AcquisitionController {
     @PreAuthorize("isAuthenticated()")
     public ResponseEntity<AcquisitionResponse> creerAcquisition(
             @Valid @RequestBody AcquisitionRequest request,
-            @RequestParam(required = false) UUID userId) {
+            @AuthenticationPrincipal User currentUser) {
+        UUID userId = currentUser.getId(); // jamais l'identifiant envoyé par le navigateur
         return ResponseEntity.status(HttpStatus.CREATED).body(
                 acquisitionService.creerAcquisition(request, userId));
     }
@@ -59,8 +60,9 @@ public class AcquisitionController {
     @PreAuthorize("hasAuthority('ROLE_RAF') or hasAuthority('ROLE_ADMIN')")
     public ResponseEntity<AcquisitionResponse> validerAcquisition(
             @PathVariable UUID id,
-            @RequestBody Map<String, String> body) {
-        UUID userId = body.get("userId") != null ? UUID.fromString(body.get("userId")) : null;
+            @RequestBody Map<String, String> body,
+            @AuthenticationPrincipal User currentUser) {
+        UUID userId = currentUser.getId(); // jamais l'identifiant envoyé par le navigateur
         return ResponseEntity.ok(acquisitionService.validerAcquisition(id, userId));
     }
 
@@ -68,9 +70,10 @@ public class AcquisitionController {
     @PreAuthorize("hasAuthority('ROLE_RAF') or hasAuthority('ROLE_ADMIN')")
     public ResponseEntity<AcquisitionResponse> rejeterAcquisition(
             @PathVariable UUID id,
-            @RequestBody Map<String, String> body) {
+            @RequestBody Map<String, String> body,
+            @AuthenticationPrincipal User currentUser) {
         String motif = body.get("motif");
-        UUID userId = body.get("userId") != null ? UUID.fromString(body.get("userId")) : null;
+        UUID userId = currentUser.getId(); // jamais l'identifiant envoyé par le navigateur
         return ResponseEntity.ok(acquisitionService.rejeterAcquisition(id, motif, userId));
     }
 }

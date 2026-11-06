@@ -8,6 +8,7 @@ import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -18,18 +19,22 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import jakarta.validation.Valid;
+import ong.fodde.modules.auth.entity.User;
 import ong.fodde.modules.financier.dto.AvanceRequest;
 import ong.fodde.modules.financier.dto.AvanceResponse;
 import ong.fodde.modules.financier.service.AvanceService;
+import ong.fodde.shared.securite.AccesPersonnel;
 
 @RestController
 @RequestMapping("/api/avances")
 public class AvanceController {
 
     private final AvanceService avanceService;
+    private final AccesPersonnel accesPersonnel;
 
-    public AvanceController(AvanceService avanceService) {
+    public AvanceController(AvanceService avanceService, AccesPersonnel accesPersonnel) {
         this.avanceService = avanceService;
+        this.accesPersonnel = accesPersonnel;
     }
 
     @GetMapping
@@ -54,7 +59,9 @@ public class AvanceController {
 
     @GetMapping("/beneficiaire/{beneficiaireId}")
     @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<List<AvanceResponse>> listerAvancesBeneficiaire(@PathVariable UUID beneficiaireId) {
+    public ResponseEntity<List<AvanceResponse>> listerAvancesBeneficiaire(@PathVariable UUID beneficiaireId,
+                                                                          @AuthenticationPrincipal User currentUser) {
+        accesPersonnel.verifierUtilisateur(beneficiaireId, currentUser, "ROLE_RAF", "ROLE_SE", "ROLE_ADMIN");
         return ResponseEntity.ok(avanceService.listerAvancesBeneficiaire(beneficiaireId));
     }
 

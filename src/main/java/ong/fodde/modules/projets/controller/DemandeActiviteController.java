@@ -6,6 +6,7 @@ import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -16,6 +17,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import jakarta.validation.Valid;
+import ong.fodde.modules.auth.entity.User;
 import ong.fodde.modules.projets.dto.DemandeActiviteRequest;
 import ong.fodde.modules.projets.dto.DemandeActiviteResponse;
 import ong.fodde.modules.projets.service.DemandeActiviteService;
@@ -53,21 +55,24 @@ public class DemandeActiviteController {
     @PatchMapping("/{id}/valider-cp")
     @PreAuthorize("hasAuthority('ROLE_CHARGE_PROGRAMME') or hasAuthority('ROLE_ADMIN')")
     public ResponseEntity<DemandeActiviteResponse> validerDemandeCp(@PathVariable UUID id,
-                                                                     @RequestParam UUID validateurId) {
+                                                                     @AuthenticationPrincipal User currentUser) {
+        UUID validateurId = currentUser.getId(); // jamais l'identifiant envoyé par le navigateur
         return ResponseEntity.ok(demandeActiviteService.validerDemandeCp(id, validateurId));
     }
 
     @PatchMapping("/{id}/valider-rp")
     @PreAuthorize("hasAuthority('ROLE_RESPONSABLE_PROGRAMMES') or hasAuthority('ROLE_ADMIN')")
     public ResponseEntity<DemandeActiviteResponse> validerDemandeRp(@PathVariable UUID id,
-                                                                     @RequestParam UUID validateurId) {
+                                                                     @AuthenticationPrincipal User currentUser) {
+        UUID validateurId = currentUser.getId(); // jamais l'identifiant envoyé par le navigateur
         return ResponseEntity.ok(demandeActiviteService.validerDemandeRp(id, validateurId));
     }
 
     @PatchMapping("/{id}/approuver-raf")
     @PreAuthorize("hasAuthority('ROLE_RAF') or hasAuthority('ROLE_ADMIN')")
     public ResponseEntity<DemandeActiviteResponse> approuverDemandeRaf(@PathVariable UUID id,
-                                                                       @RequestParam UUID validateurId) {
+                                                                       @AuthenticationPrincipal User currentUser) {
+        UUID validateurId = currentUser.getId(); // jamais l'identifiant envoyé par le navigateur
         return ResponseEntity.ok(demandeActiviteService.approuverDemandeRaf(id, validateurId));
     }
 
