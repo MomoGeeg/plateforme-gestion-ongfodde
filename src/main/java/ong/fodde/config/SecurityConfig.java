@@ -6,6 +6,7 @@ import jakarta.servlet.DispatcherType;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
@@ -47,6 +48,7 @@ public class SecurityConfig {
                 auth.dispatcherTypeMatchers(DispatcherType.ERROR, DispatcherType.FORWARD).permitAll();
                 auth.requestMatchers("/error").permitAll();
                 auth.requestMatchers("/api/auth/login").permitAll();
+                auth.requestMatchers(HttpMethod.GET, "/api/health").permitAll();
                 if (securitySettings.isInitEndpointEnabled()) {
                     auth.requestMatchers("/api/auth/init").permitAll();
                 } else {
