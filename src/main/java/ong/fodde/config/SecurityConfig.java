@@ -2,6 +2,8 @@ package ong.fodde.config;
 
 import java.util.List;
 
+import jakarta.servlet.DispatcherType;
+
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -40,6 +42,10 @@ public class SecurityConfig {
                 .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
             )
             .authorizeHttpRequests(auth -> {
+                // Les erreurs (403, 400, 500…) sont renvoyées en interne vers /error : sans ceci,
+                // toute erreur devenait un 401 « Non authentifié » et le frontend déconnectait l'utilisateur.
+                auth.dispatcherTypeMatchers(DispatcherType.ERROR, DispatcherType.FORWARD).permitAll();
+                auth.requestMatchers("/error").permitAll();
                 auth.requestMatchers("/api/auth/login").permitAll();
                 if (securitySettings.isInitEndpointEnabled()) {
                     auth.requestMatchers("/api/auth/init").permitAll();
@@ -51,8 +57,14 @@ public class SecurityConfig {
             .exceptionHandling(ex -> ex
                 .authenticationEntryPoint((request, response, authException) -> {
                     response.setStatus(401);
-                    response.setContentType("application/json");
+                    response.setContentType("application/json;charset=UTF-8");
                     response.getWriter().write("{\"erreur\":\"Non authentifié\"}");
+                })
+                // Connecté mais rôle insuffisant : 403 (pas de déconnexion côté frontend)
+                .accessDeniedHandler((request, response, accessDeniedException) -> {
+                    response.setStatus(403);
+                    response.setContentType("application/json;charset=UTF-8");
+                    response.getWriter().write("{\"erreur\":\"Accès refusé : droits insuffisants\"}");
                 })
             )
             .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
