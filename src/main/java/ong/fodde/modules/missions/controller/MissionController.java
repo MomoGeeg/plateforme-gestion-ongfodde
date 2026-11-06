@@ -34,7 +34,7 @@ public class MissionController {
     }
 
     @GetMapping
-    @PreAuthorize("hasAuthority('ROLE_RAF') or hasAuthority('ROLE_SE') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('ROLE_RAF') or hasAuthority('ROLE_SE') or hasAuthority('ROLE_ADMIN') or hasAuthority('ROLE_RESPONSABLE_PROGRAMMES')")
     public ResponseEntity<List<MissionResponse>> listerToutesMissions() {
         return ResponseEntity.ok(missionService.listerToutesMissions());
     }
