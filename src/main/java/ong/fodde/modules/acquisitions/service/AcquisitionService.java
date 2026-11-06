@@ -54,6 +54,11 @@ public class AcquisitionService {
         return toResponses(acquisitionRepository.findAll());
     }
 
+    @Transactional(readOnly = true)
+    public List<AcquisitionResponse> mesAcquisitions(UUID userId) {
+        return toResponses(acquisitionRepository.findBySoumisParId(userId));
+    }
+
     /** Conversion d'une liste : projets et auteurs chargés en une requête chacun. */
     private List<AcquisitionResponse> toResponses(List<Acquisition> acquisitions) {
         precharger(projetRepository, acquisitions, Acquisition::getProjetId);
