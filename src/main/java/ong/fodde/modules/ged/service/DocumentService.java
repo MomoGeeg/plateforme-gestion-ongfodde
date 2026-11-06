@@ -1,17 +1,25 @@
 package ong.fodde.modules.ged.service;
 
+import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
+import ong.fodde.modules.auth.entity.User;
 import ong.fodde.modules.auth.repository.UserRepository;
+import ong.fodde.modules.ged.entity.TelechargementLog;
+import ong.fodde.modules.ged.repository.TelechargementLogRepository;
+import ong.fodde.modules.rh.repository.EmployeRepository;
 import ong.fodde.modules.ged.dto.DocumentRequest;
 import ong.fodde.modules.ged.dto.DocumentResponse;
 import ong.fodde.modules.ged.dto.VersionDocumentRequest;
@@ -97,16 +105,43 @@ public class DocumentService {
         return new Set[]{lecture, ecriture};
     }
 
+    /** Préfixe des chemins de fichiers réellement stockés (les anciennes versions ne contiennent qu'un nom). */
+    private static final String PREFIXE_STOCKAGE = "documents/";
+
+    private static final long TAILLE_MAX_OCTETS = 25L * 1024 * 1024;
+
+    /** Extension autorisée → type de fichier affiché */
+    private static final Map<String, String> EXTENSIONS_AUTORISEES = Map.of(
+            "pdf", "PDF",
+            "doc", "DOCX", "docx", "DOCX",
+            "xls", "XLSX", "xlsx", "XLSX",
+            "jpg", "JPG", "jpeg", "JPG",
+            "png", "PNG",
+            "zip", "ZIP");
+
     private final DocumentRepository documentRepository;
     private final VersionDocumentRepository versionDocumentRepository;
     private final UserRepository userRepository;
+    private final TelechargementLogRepository telechargementLogRepository;
+    private final EmployeRepository employeRepository;
+    private final StockageFichierService stockageFichierService;
 
     public DocumentService(DocumentRepository documentRepository,
                            VersionDocumentRepository versionDocumentRepository,
-                           UserRepository userRepository) {
+                           UserRepository userRepository,
+                           TelechargementLogRepository telechargementLogRepository,
+                           EmployeRepository employeRepository,
+                           StockageFichierService stockageFichierService) {
         this.documentRepository = documentRepository;
         this.versionDocumentRepository = versionDocumentRepository;
         this.userRepository = userRepository;
+        this.telechargementLogRepository = telechargementLogRepository;
+        this.employeRepository = employeRepository;
+        this.stockageFichierService = stockageFichierService;
+    }
+
+    /** Fichier prêt à être renvoyé au navigateur. */
+    public record FichierTelecharge(String nomFichier, String contentType, byte[] contenu) {
     }
 
     // ── Créer un document ──────────────────────────────────────────────────────
@@ -259,6 +294,166 @@ public class DocumentService {
         return toVersionResponse(versionDocumentRepository.save(version));
     }
 
+    /**
+     * Dépose un vrai fichier : envoi vers le stockage privé puis création d'une nouvelle version.
+     */
+    public VersionDocumentResponse deposerFichier(UUID documentId, MultipartFile fichier, User user) {
+        Document document = documentRepository.findById(documentId)
+                .orElseThrow(() -> new ResourceNotFoundException("Document non trouvé : " + documentId));
+
+        if (!peutEcrire(document, user)) {
+            throw new AccessDeniedException("Vous n'avez pas le droit de déposer un fichier sur ce document");
+        }
+        if (document.getStatut() == StatutDocument.EN_VALIDATION) {
+            throw new BusinessException("Impossible d'ajouter une version : document en cours de validation");
+        }
+        if (document.getStatut() == StatutDocument.ARCHIVE) {
+            throw new BusinessException("Impossible d'ajouter une version : document archivé");
+        }
+        if (fichier == null || fichier.isEmpty()) {
+            throw new BusinessException("Le fichier est vide");
+        }
+        if (fichier.getSize() > TAILLE_MAX_OCTETS) {
+            throw new BusinessException("Fichier trop volumineux (25 Mo maximum)");
+        }
+        String extension = extension(fichier.getOriginalFilename());
+        String typeFichier = EXTENSIONS_AUTORISEES.get(extension);
+        if (typeFichier == null) {
+            throw new BusinessException("Format non autorisé. Formats acceptés : PDF, DOCX, XLSX, JPG, PNG, ZIP");
+        }
+
+        int nouvelleVersion = document.getVersionActuelle() + 1;
+        // Nom aléatoire : jamais de nom fourni par l'utilisateur dans le chemin de stockage
+        String chemin = PREFIXE_STOCKAGE + documentId + "/v" + nouvelleVersion + "-" + UUID.randomUUID() + "." + extension;
+
+        try {
+            stockageFichierService.deposer(chemin, fichier.getBytes(), fichier.getContentType());
+        } catch (IOException e) {
+            throw new BusinessException("Lecture du fichier impossible");
+        }
+
+        document.setVersionActuelle(nouvelleVersion);
+        documentRepository.save(document);
+
+        VersionDocument version = new VersionDocument();
+        version.setDocumentId(documentId);
+        version.setVersion(nouvelleVersion);
+        version.setUrl(chemin);
+        version.setTaille(fichier.getSize());
+        version.setTypeFichier(typeFichier);
+        version.setUploadePar(user.getId());
+        version.setUploadeLe(LocalDateTime.now());
+
+        return toVersionResponse(versionDocumentRepository.save(version));
+    }
+
+    /**
+     * Télécharge le fichier d'une version après contrôle des droits de lecture, et journalise l'accès.
+     */
+    public FichierTelecharge telechargerFichier(UUID documentId, UUID versionId, User user, String ipAddress) {
+        Document document = documentRepository.findById(documentId)
+                .orElseThrow(() -> new ResourceNotFoundException("Document non trouvé : " + documentId));
+        VersionDocument version = versionDocumentRepository.findById(versionId)
+                .filter(v -> v.getDocumentId().equals(documentId))
+                .orElseThrow(() -> new ResourceNotFoundException("Version non trouvée : " + versionId));
+
+        if (!peutLire(document, user)) {
+            throw new AccessDeniedException("Vous n'avez pas accès à ce document");
+        }
+        if (!estStocke(version)) {
+            throw new BusinessException(
+                    "Aucun fichier stocké pour cette version (dépôt antérieur à la mise en place du stockage)");
+        }
+
+        byte[] contenu = stockageFichierService.lire(version.getUrl());
+
+        TelechargementLog log = new TelechargementLog();
+        log.setDocumentId(documentId);
+        log.setUserId(user.getId());
+        log.setDateTel(LocalDateTime.now());
+        log.setIpAddress(ipAddress);
+        telechargementLogRepository.save(log);
+
+        String extension = extension(version.getUrl());
+        String nomFichier = nettoyerNom(document.getTitre()) + "-v" + version.getVersion() + "." + extension;
+        return new FichierTelecharge(nomFichier, contentTypePour(extension), contenu);
+    }
+
+    // ── Droits d'accès ────────────────────────────────────────────────────────
+
+    private boolean estSuperAdmin(User user) {
+        return rolesDe(user).stream().anyMatch(SUPER_ROLES::contains);
+    }
+
+    private boolean peutEcrire(Document document, User user) {
+        if (estSuperAdmin(user) || user.getId().equals(document.getCreatedBy())) {
+            return true;
+        }
+        Set<String> roles = rolesDe(user);
+        return document.getRolesEcriture().stream().anyMatch(roles::contains);
+    }
+
+    private boolean peutLire(Document document, User user) {
+        if (estSuperAdmin(user)) {
+            return true;
+        }
+        // Mêmes règles que la liste des documents : les documents archivés ne sont visibles que des super-admins
+        if (document.getStatut() == StatutDocument.ARCHIVE) {
+            return false;
+        }
+        if (user.getId().equals(document.getCreatedBy()) || peutEcrire(document, user)) {
+            return true;
+        }
+        Set<String> roles = rolesDe(user);
+        if (document.getRolesLecture().stream().anyMatch(roles::contains)) {
+            return true;
+        }
+        // Document personnel (bulletin, contrat, évaluation) : l'employé concerné y a accès
+        return document.getConcerneEmployeId() != null
+                && employeRepository.findByUserId(user.getId())
+                        .map(e -> document.getConcerneEmployeId().equals(e.getId()))
+                        .orElse(false);
+    }
+
+    private static Set<String> rolesDe(User user) {
+        Set<String> roles = new HashSet<>();
+        user.getRoles().forEach(r -> roles.add(r.getNom()));
+        return roles;
+    }
+
+    // ── Utilitaires fichiers ──────────────────────────────────────────────────
+
+    private static boolean estStocke(VersionDocument version) {
+        return version.getUrl() != null && version.getUrl().startsWith(PREFIXE_STOCKAGE);
+    }
+
+    private static String extension(String nom) {
+        if (nom == null) {
+            return "";
+        }
+        int point = nom.lastIndexOf('.');
+        return point < 0 ? "" : nom.substring(point + 1).toLowerCase(Locale.ROOT);
+    }
+
+    private static String nettoyerNom(String titre) {
+        String nom = titre == null ? "document" : titre.replaceAll("[\\\\/:*?\"<>|\\r\\n]+", "_").trim();
+        return nom.isEmpty() ? "document" : nom;
+    }
+
+    private static String contentTypePour(String extension) {
+        return switch (extension) {
+            case "pdf" -> "application/pdf";
+            case "doc" -> "application/msword";
+            case "docx" -> "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+            case "xls" -> "application/vnd.ms-excel";
+            case "xlsx" -> "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+            case "jpg", "jpeg" -> "image/jpeg";
+            case "png" -> "image/png";
+            case "zip" -> "application/zip";
+            default -> "application/octet-stream";
+        };
+    }
+
     @Transactional(readOnly = true)
     public List<VersionDocumentResponse> listerVersions(UUID documentId) {
         return versionDocumentRepository.findByDocumentIdOrderByVersionDesc(documentId)
@@ -312,7 +507,8 @@ public class DocumentService {
                 v.getTaille(),
                 v.getTypeFichier(),
                 v.getUploadePar(),
-                v.getUploadeLe()
+                v.getUploadeLe(),
+                estStocke(v)
         );
     }
 }
