@@ -16,6 +16,8 @@ import ong.fodde.modules.projets.repository.ProjetRepository;
 import ong.fodde.shared.exception.BusinessException;
 import ong.fodde.shared.exception.ResourceNotFoundException;
 
+import static ong.fodde.shared.util.Prechargement.precharger;
+
 @Service
 @Transactional
 public class AcquisitionService {
@@ -49,7 +51,14 @@ public class AcquisitionService {
 
     @Transactional(readOnly = true)
     public List<AcquisitionResponse> listerToutesAcquisitions() {
-        return acquisitionRepository.findAll().stream().map(this::toResponse).toList();
+        return toResponses(acquisitionRepository.findAll());
+    }
+
+    /** Conversion d'une liste : projets et auteurs chargés en une requête chacun. */
+    private List<AcquisitionResponse> toResponses(List<Acquisition> acquisitions) {
+        precharger(projetRepository, acquisitions, Acquisition::getProjetId);
+        precharger(userRepository, acquisitions, Acquisition::getSoumisParId);
+        return acquisitions.stream().map(this::toResponse).toList();
     }
 
     public AcquisitionResponse validerAcquisition(UUID id, UUID userId) {

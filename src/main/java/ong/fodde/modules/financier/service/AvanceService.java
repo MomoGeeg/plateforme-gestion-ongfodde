@@ -18,6 +18,8 @@ import ong.fodde.modules.financier.repository.AvanceRepository;
 import ong.fodde.modules.projets.repository.ProjetRepository;
 import ong.fodde.shared.exception.ResourceNotFoundException;
 
+import static ong.fodde.shared.util.Prechargement.precharger;
+
 @Service
 @Transactional
 public class AvanceService {
@@ -49,27 +51,29 @@ public class AvanceService {
 
     @Transactional(readOnly = true)
     public List<AvanceResponse> listerAvancesProjet(UUID projetId) {
-        return avanceRepository.findByProjetId(projetId).stream()
-                .map(this::toResponse)
-                .toList();
+        return toResponses(avanceRepository.findByProjetId(projetId));
     }
 
     @Transactional(readOnly = true)
     public List<AvanceResponse> listerAvancesBeneficiaire(UUID beneficiaireId) {
-        return avanceRepository.findByBeneficiaireId(beneficiaireId).stream()
-                .map(this::toResponse)
-                .toList();
+        return toResponses(avanceRepository.findByBeneficiaireId(beneficiaireId));
     }
 
     /** Liste toutes les avances. Si justifiee=false → exclut les SOLDEE. */
     @Transactional(readOnly = true)
     public List<AvanceResponse> listerToutesAvances(Boolean justifiee) {
-        return avanceRepository.findAll().stream()
+        return toResponses(avanceRepository.findAll().stream()
                 .filter(a -> justifiee == null || Boolean.TRUE.equals(justifiee)
                         ? true
                         : a.getStatut() != StatutAvance.SOLDEE)
-                .map(this::toResponse)
-                .toList();
+                .toList());
+    }
+
+    /** Conversion d'une liste : bénéficiaires et projets chargés en une requête chacun. */
+    private List<AvanceResponse> toResponses(List<Avance> avances) {
+        precharger(userRepository, avances, Avance::getBeneficiaireId);
+        precharger(projetRepository, avances, Avance::getProjetId);
+        return avances.stream().map(this::toResponse).toList();
     }
 
     public AvanceResponse justifierAvance(UUID id, BigDecimal montantJustifie, LocalDate dateJustification) {

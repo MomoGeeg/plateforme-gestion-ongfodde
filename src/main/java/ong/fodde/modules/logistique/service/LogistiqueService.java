@@ -26,6 +26,8 @@ import ong.fodde.modules.logistique.repository.VehiculeRepository;
 import ong.fodde.shared.exception.BusinessException;
 import ong.fodde.shared.exception.ResourceNotFoundException;
 
+import static ong.fodde.shared.util.Prechargement.precharger;
+
 @Service
 @RequiredArgsConstructor
 public class LogistiqueService {
@@ -116,19 +118,27 @@ public class LogistiqueService {
 
     // ══════════════════════════ MOUVEMENTS ═════════════════════
 
+    @Transactional(readOnly = true)
     public List<MouvementResponse> listerMouvements() {
-        return mouvementRepository.findByIsDeletedFalseOrderByDateMouvementDesc()
-                .stream().map(this::toMouvementResponse).toList();
+        return toMouvementResponses(mouvementRepository.findByIsDeletedFalseOrderByDateMouvementDesc());
     }
 
+    @Transactional(readOnly = true)
     public List<MouvementResponse> getMouvementsBien(UUID bienId) {
-        return mouvementRepository.findByBienIdAndIsDeletedFalseOrderByDateMouvementDesc(bienId)
-                .stream().map(this::toMouvementResponse).toList();
+        return toMouvementResponses(mouvementRepository.findByBienIdAndIsDeletedFalseOrderByDateMouvementDesc(bienId));
     }
 
+    @Transactional(readOnly = true)
     public List<MouvementResponse> getMouvementsVehicule(UUID vehiculeId) {
-        return mouvementRepository.findByVehiculeIdAndIsDeletedFalseOrderByDateMouvementDesc(vehiculeId)
-                .stream().map(this::toMouvementResponse).toList();
+        return toMouvementResponses(
+                mouvementRepository.findByVehiculeIdAndIsDeletedFalseOrderByDateMouvementDesc(vehiculeId));
+    }
+
+    /** Conversion d'une liste : biens et véhicules chargés en une requête chacun. */
+    private List<MouvementResponse> toMouvementResponses(List<MouvementMateriel> mouvements) {
+        precharger(bienRepository, mouvements, MouvementMateriel::getBienId);
+        precharger(vehiculeRepository, mouvements, MouvementMateriel::getVehiculeId);
+        return mouvements.stream().map(this::toMouvementResponse).toList();
     }
 
     @Transactional
@@ -282,9 +292,6 @@ public class LogistiqueService {
         String vehiculeImmat   = null;
 
         if (m.getBienId() != null) {
-            bienRepository.findById(m.getBienId()).ifPresent(b -> {
-                // non-final — workaround via map
-            });
             var optBien = bienRepository.findById(m.getBienId());
             if (optBien.isPresent()) {
                 bienDesignation = optBien.get().getDesignation();
