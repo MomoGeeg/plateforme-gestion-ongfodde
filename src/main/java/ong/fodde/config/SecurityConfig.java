@@ -77,6 +77,8 @@ public class SecurityConfig {
         config.setAllowedOriginPatterns(securitySettings.corsAllowedOriginsList());
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of("*"));
+        // Permet au frontend de lire le nom du fichier téléchargé
+        config.setExposedHeaders(List.of("Content-Disposition"));
         config.setAllowCredentials(true);
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", config);

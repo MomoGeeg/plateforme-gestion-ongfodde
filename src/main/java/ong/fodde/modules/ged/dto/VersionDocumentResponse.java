@@ -11,6 +11,8 @@ public record VersionDocumentResponse(
         Long taille,
         String typeFichier,
         UUID uploadePar,
-        LocalDateTime uploadeLe
+        LocalDateTime uploadeLe,
+        /** true si le fichier est réellement stocké et téléchargeable via l'API */
+        boolean fichierDisponible
 ) {
 }

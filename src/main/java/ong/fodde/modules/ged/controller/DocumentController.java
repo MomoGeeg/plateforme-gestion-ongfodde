@@ -1,10 +1,14 @@
 package ong.fodde.modules.ged.controller;
 
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -16,7 +20,9 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import ong.fodde.modules.auth.entity.Role;
 import ong.fodde.modules.auth.entity.User;
@@ -125,5 +131,38 @@ public class DocumentController {
     @PreAuthorize("isAuthenticated()")
     public ResponseEntity<List<VersionDocumentResponse>> listerVersions(@PathVariable UUID id) {
         return ResponseEntity.ok(documentService.listerVersions(id));
+    }
+
+    // ── Fichiers (stockage privé) ─────────────────────────────────────────────
+
+    /** Dépose un fichier et crée une nouvelle version (multipart, champ « fichier »). */
+    @PostMapping(value = "/{id}/fichier", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<VersionDocumentResponse> deposerFichier(
+            @PathVariable UUID id,
+            @RequestParam("fichier") MultipartFile fichier,
+            @AuthenticationPrincipal User currentUser) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(documentService.deposerFichier(id, fichier, currentUser));
+    }
+
+    /** Télécharge le fichier d'une version (droits de lecture vérifiés, accès journalisé). */
+    @GetMapping("/{id}/versions/{versionId}/fichier")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<byte[]> telechargerFichier(
+            @PathVariable UUID id,
+            @PathVariable UUID versionId,
+            @AuthenticationPrincipal User currentUser,
+            HttpServletRequest request) {
+        DocumentService.FichierTelecharge fichier =
+                documentService.telechargerFichier(id, versionId, currentUser, request.getRemoteAddr());
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment()
+                        .filename(fichier.nomFichier(), StandardCharsets.UTF_8)
+                        .build()
+                        .toString())
+                .header(HttpHeaders.CACHE_CONTROL, "no-store")
+                .contentType(MediaType.parseMediaType(fichier.contentType()))
+                .body(fichier.contenu());
     }
 }
