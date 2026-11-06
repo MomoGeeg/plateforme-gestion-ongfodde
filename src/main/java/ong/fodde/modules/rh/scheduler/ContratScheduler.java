@@ -23,12 +23,4 @@ public class ContratScheduler {
         contratService.verifierEcheancesContrats();
     }
 
-    /**
-     * Test immédiat au démarrage de l'application (à supprimer en production)
-     * Délai de 30 secondes après le démarrage
-     */
-    @Scheduled(initialDelay = 30000, fixedDelay = Long.MAX_VALUE)
-    public void verifierEcheancesAuDemarrage() {
-        contratService.verifierEcheancesContrats();
-    }
 }
