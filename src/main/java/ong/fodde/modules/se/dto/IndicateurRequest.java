@@ -12,7 +12,8 @@ public record IndicateurRequest(
     @NotNull(message = "L'identifiant du projet est obligatoire")
     UUID projetId,
 
-    @NotBlank(message = "Le code de l'indicateur est obligatoire")
+    /** Facultatif : généré à partir du code du projet s'il est vide (ex. PROJ-2025-001-IND-03). */
+
     String code,
 
     @NotBlank(message = "Le libellé est obligatoire")

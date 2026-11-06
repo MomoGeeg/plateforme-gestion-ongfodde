@@ -8,6 +8,8 @@ import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import ong.fodde.modules.projets.entity.Projet;
+import ong.fodde.modules.projets.repository.ProjetRepository;
 import ong.fodde.modules.se.dto.IndicateurRequest;
 import ong.fodde.modules.se.dto.IndicateurResponse;
 import ong.fodde.modules.se.entity.Indicateur;
@@ -19,20 +21,28 @@ import ong.fodde.shared.exception.ResourceNotFoundException;
 @Transactional
 public class IndicateurService {
 
-    private final IndicateurRepository indicateurRepository;
+    /** Longueur maximale de la colonne indicateurs.code. */
+    private static final int LONGUEUR_CODE = 30;
 
-    public IndicateurService(IndicateurRepository indicateurRepository) {
+    private final IndicateurRepository indicateurRepository;
+    private final ProjetRepository projetRepository;
+
+    public IndicateurService(IndicateurRepository indicateurRepository, ProjetRepository projetRepository) {
         this.indicateurRepository = indicateurRepository;
+        this.projetRepository = projetRepository;
     }
 
     public IndicateurResponse creerIndicateur(IndicateurRequest request) {
-        if (indicateurRepository.existsByCode(request.code())) {
-            throw new BusinessException("Un indicateur avec le code '" + request.code() + "' existe déjà");
+        String code = request.code() == null || request.code().isBlank()
+            ? genererCode(request.projetId())
+            : request.code().trim();
+        if (indicateurRepository.existsByCode(code)) {
+            throw new BusinessException("Un indicateur avec le code '" + code + "' existe déjà");
         }
 
         Indicateur indicateur = new Indicateur();
         indicateur.setProjetId(request.projetId());
-        indicateur.setCode(request.code());
+        indicateur.setCode(code);
         indicateur.setLibelle(request.libelle());
         indicateur.setType(request.type());
         indicateur.setNiveau(request.niveau());
@@ -46,6 +56,27 @@ public class IndicateurService {
 
         Indicateur saved = indicateurRepository.save(indicateur);
         return toResponse(saved);
+    }
+
+    /**
+     * Code suivant pour un projet : « {code projet}-IND-{numéro} », ex. PROJ-2025-001-IND-03.
+     * Le numéro suit le nombre d'indicateurs du projet ; on avance tant qu'il est déjà pris.
+     */
+    private String genererCode(UUID projetId) {
+        Projet projet = projetRepository.findById(projetId)
+            .orElseThrow(() -> new ResourceNotFoundException("Projet introuvable : " + projetId));
+        String suffixe = "-IND-";
+        String prefixe = projet.getCode();
+        int place = LONGUEUR_CODE - suffixe.length() - 2;
+        if (prefixe.length() > place) {
+            prefixe = prefixe.substring(0, place);
+        }
+        int numero = indicateurRepository.findByProjetId(projetId).size() + 1;
+        String code;
+        do {
+            code = prefixe + suffixe + String.format("%02d", numero++);
+        } while (indicateurRepository.existsByCode(code));
+        return code;
     }
 
     @Transactional(readOnly = true)
