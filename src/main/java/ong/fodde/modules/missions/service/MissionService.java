@@ -55,6 +55,11 @@ public class MissionService {
     }
 
     @Transactional(readOnly = true)
+    public List<MissionResponse> mesMissions(UUID userId) {
+        return toResponses(missionRepository.findByEmployeId(userId));
+    }
+
+    @Transactional(readOnly = true)
     public List<MissionResponse> listerMissionsParProjet(UUID projetId) {
         return toResponses(missionRepository.findByProjetId(projetId));
     }

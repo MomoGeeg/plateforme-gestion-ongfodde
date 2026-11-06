@@ -7,6 +7,7 @@ import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -17,6 +18,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import jakarta.validation.Valid;
+import ong.fodde.modules.auth.entity.User;
 import ong.fodde.modules.acquisitions.dto.AcquisitionRequest;
 import ong.fodde.modules.acquisitions.dto.AcquisitionResponse;
 import ong.fodde.modules.acquisitions.service.AcquisitionService;
@@ -35,6 +37,13 @@ public class AcquisitionController {
     @PreAuthorize("hasAuthority('ROLE_RAF') or hasAuthority('ROLE_SE') or hasAuthority('ROLE_ADMIN')")
     public ResponseEntity<List<AcquisitionResponse>> listerToutesAcquisitions() {
         return ResponseEntity.ok(acquisitionService.listerToutesAcquisitions());
+    }
+
+    /** Acquisitions demandées par l'utilisateur connecté. */
+    @GetMapping("/mes-acquisitions")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<List<AcquisitionResponse>> mesAcquisitions(@AuthenticationPrincipal User currentUser) {
+        return ResponseEntity.ok(acquisitionService.mesAcquisitions(currentUser.getId()));
     }
 
     @PostMapping
