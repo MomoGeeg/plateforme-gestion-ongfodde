@@ -1,0 +1,20 @@
+# Copier ce fichier vers application-local.properties (non versionné).
+#
+# Supabase (session pooler, conseillé si pas d’IPv6) :
+# Dashboard > Connect > méthode "Session pooler" — copier URI du type :
+#   postgres://postgres.ABCDE:[PASSWORD]@aws-0-eu-central-1.pooler.supabase.com:5432/postgres
+# Équivalent JDBC :
+#   jdbc:postgresql://aws-0-eu-central-1.pooler.supabase.com:5432/postgres?sslmode=require&stringtype=unspecified&prepareThreshold=0
+# Utilisateur : tel quel (ex. postgres.ABCDE), pas seulement "postgres".
+# Mot de passe : Database password du projet (après reset, mettre le nouveau ici).
+
+spring.datasource.url=jdbc:postgresql://VOTRE_HOTE_POOLER:5432/postgres?sslmode=require&stringtype=unspecified&prepareThreshold=0
+spring.datasource.username=postgres.VOTRE_PROJECT_REF
+spring.datasource.password=VOTRE_MOT_DE_PASSE
+
+# Secret JWT : au moins 32 octets UTF-8 (souvent 32 caractères ASCII ou plus)
+# Exemple valide (à remplacer par votre propre secret) :
+app.jwt.secret=FoddeLocalDevSecret-ChangeMe-32charsMinimum!!123456789
+
+# Optionnel : débloquer une seule fois la création du compte admin initial
+# app.security.init-endpoint-enabled=true

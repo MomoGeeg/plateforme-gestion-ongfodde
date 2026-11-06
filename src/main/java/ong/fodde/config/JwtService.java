@@ -17,12 +17,27 @@ import ong.fodde.modules.auth.entity.User;
 @Component
 public class JwtService {
 
+    private static final int MIN_JWT_SECRET_BYTES = 32;
+
     private final JwtConfig jwtConfig;
     private final SecretKey signingKey;
 
     public JwtService(JwtConfig jwtConfig) {
         this.jwtConfig = jwtConfig;
-        this.signingKey = Keys.hmacShaKeyFor(jwtConfig.getSecret().getBytes(StandardCharsets.UTF_8));
+        String secret = jwtConfig.getSecret();
+        if (secret == null || secret.isBlank()) {
+            throw new IllegalStateException(
+                    "APP_JWT_SECRET (app.jwt.secret) est obligatoire et ne doit pas être vide.");
+        }
+        byte[] secretBytes = secret.getBytes(StandardCharsets.UTF_8);
+        if (secretBytes.length < MIN_JWT_SECRET_BYTES) {
+            throw new IllegalStateException(
+                    "Secret JWT trop court : " + secretBytes.length + " octet(s) UTF-8, "
+                            + MIN_JWT_SECRET_BYTES + " minimum pour HMAC-SHA (HS256). "
+                            + "En pratique : au moins 32 caractères ASCII dans APP_JWT_SECRET ou app.jwt.secret "
+                            + "(fichier application-local.properties).");
+        }
+        this.signingKey = Keys.hmacShaKeyFor(secretBytes);
     }
 
     public String generateToken(User user) {
