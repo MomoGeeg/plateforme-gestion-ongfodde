@@ -16,6 +16,8 @@ import ong.fodde.modules.projets.repository.ProjetRepository;
 import ong.fodde.shared.exception.BusinessException;
 import ong.fodde.shared.exception.ResourceNotFoundException;
 
+import static ong.fodde.shared.util.Prechargement.precharger;
+
 @Service
 @Transactional
 public class MissionService {
@@ -49,12 +51,19 @@ public class MissionService {
 
     @Transactional(readOnly = true)
     public List<MissionResponse> listerToutesMissions() {
-        return missionRepository.findAll().stream().map(this::toResponse).toList();
+        return toResponses(missionRepository.findAll());
     }
 
     @Transactional(readOnly = true)
     public List<MissionResponse> listerMissionsParProjet(UUID projetId) {
-        return missionRepository.findByProjetId(projetId).stream().map(this::toResponse).toList();
+        return toResponses(missionRepository.findByProjetId(projetId));
+    }
+
+    /** Conversion d'une liste : employés et projets chargés en une requête chacun. */
+    private List<MissionResponse> toResponses(List<Mission> missions) {
+        precharger(userRepository, missions, Mission::getEmployeId);
+        precharger(projetRepository, missions, Mission::getProjetId);
+        return missions.stream().map(this::toResponse).toList();
     }
 
     /** N+1 approves the mission request */

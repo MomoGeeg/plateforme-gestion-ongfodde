@@ -25,6 +25,8 @@ import ong.fodde.modules.projets.repository.ProjetRepository;
 import ong.fodde.shared.exception.BusinessException;
 import ong.fodde.shared.exception.ResourceNotFoundException;
 
+import static ong.fodde.shared.util.Prechargement.precharger;
+
 @Service
 @Transactional
 public class DepenseService {
@@ -111,17 +113,22 @@ public class DepenseService {
 
     @Transactional(readOnly = true)
     public List<DepenseResponse> listerToutesDepenses(StatutDepense statut) {
-        return depenseRepository.findAll().stream()
+        return toResponses(depenseRepository.findAll().stream()
             .filter(d -> statut == null || d.getStatut() == statut)
-            .map(this::toResponse)
-            .toList();
+            .toList());
     }
 
     @Transactional(readOnly = true)
     public List<DepenseResponse> listerDepenses(UUID projetId) {
-        return depenseRepository.findByProjetId(projetId).stream()
-            .map(this::toResponse)
-            .toList();
+        return toResponses(depenseRepository.findByProjetId(projetId));
+    }
+
+    /** Conversion d'une liste : lignes budgétaires, projets et auteurs chargés en une requête chacun. */
+    private List<DepenseResponse> toResponses(List<Depense> depenses) {
+        precharger(ligneBudgetaireRepository, depenses, Depense::getLigneBudgetaireId);
+        precharger(projetRepository, depenses, Depense::getProjetId);
+        precharger(userRepository, depenses, Depense::getSaisiParId);
+        return depenses.stream().map(this::toResponse).toList();
     }
 
     public DepenseResponse changerStatut(UUID id, StatutDepense nouveauStatut, UUID userId, String motif) {
@@ -170,9 +177,7 @@ public class DepenseService {
 
     @Transactional(readOnly = true)
     public List<DepenseResponse> mesDepenses(UUID userId) {
-        return depenseRepository.findBySaisiParId(userId).stream()
-            .map(this::toResponse)
-            .toList();
+        return toResponses(depenseRepository.findBySaisiParId(userId));
     }
 
     @Transactional(readOnly = true)

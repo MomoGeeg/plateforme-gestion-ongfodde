@@ -33,6 +33,8 @@ import ong.fodde.modules.ged.repository.VersionDocumentRepository;
 import ong.fodde.shared.exception.BusinessException;
 import ong.fodde.shared.exception.ResourceNotFoundException;
 
+import static ong.fodde.shared.util.Prechargement.precharger;
+
 @Service
 @Transactional
 public class DocumentService {
@@ -188,21 +190,22 @@ public class DocumentService {
         // ROLE_SE et ROLE_ADMIN voient tout (hors ARCHIVE)
         boolean isSuperAdmin = userRoles.stream().anyMatch(SUPER_ROLES::contains);
         if (isSuperAdmin) {
-            return documentRepository.findAll().stream()
+            return toResponses(documentRepository.findAll().stream()
                     .filter(d -> d.getStatut() != StatutDocument.ARCHIVE)
                     .sorted((a, b) -> b.getCreatedAt().compareTo(a.getCreatedAt()))
-                    .map(this::toResponse)
-                    .toList();
+                    .toList());
         }
         // Éviter le paramètre null UUID dans la requête PostgreSQL
         if (employeId != null) {
-            return documentRepository.findAccessiblesAvecEmploye(userId, userRoles, employeId).stream()
-                    .map(this::toResponse)
-                    .toList();
+            return toResponses(documentRepository.findAccessiblesAvecEmploye(userId, userRoles, employeId));
         }
-        return documentRepository.findAccessibles(userId, userRoles).stream()
-                .map(this::toResponse)
-                .toList();
+        return toResponses(documentRepository.findAccessibles(userId, userRoles));
+    }
+
+    /** Conversion d'une liste : auteurs chargés en une seule requête. */
+    private List<DocumentResponse> toResponses(List<Document> documents) {
+        precharger(userRepository, documents, Document::getCreatedBy);
+        return documents.stream().map(this::toResponse).toList();
     }
 
     @Transactional(readOnly = true)
@@ -264,8 +267,7 @@ public class DocumentService {
 
     @Transactional(readOnly = true)
     public List<DocumentResponse> listerEnValidation() {
-        return documentRepository.findByStatutOrderByCreatedAtDesc(StatutDocument.EN_VALIDATION)
-                .stream().map(this::toResponse).toList();
+        return toResponses(documentRepository.findByStatutOrderByCreatedAtDesc(StatutDocument.EN_VALIDATION));
     }
 
     // ── Versions ──────────────────────────────────────────────────────────────
