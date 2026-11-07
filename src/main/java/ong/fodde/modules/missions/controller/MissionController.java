@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import jakarta.validation.Valid;
 import ong.fodde.modules.auth.entity.User;
+import ong.fodde.modules.historique.dto.EtapeHistorique;
 import ong.fodde.modules.missions.dto.MissionRequest;
 import ong.fodde.modules.missions.dto.MissionResponse;
 import ong.fodde.modules.missions.service.MissionService;
@@ -58,8 +59,17 @@ public class MissionController {
 
     @PatchMapping("/{id}/approuver-n1")
     @PreAuthorize("hasAuthority('ROLE_RESPONSABLE_PROGRAMMES') or hasAuthority('ROLE_SE') or hasAuthority('ROLE_ADMIN')")
-    public ResponseEntity<MissionResponse> approuverN1(@PathVariable UUID id) {
-        return ResponseEntity.ok(missionService.approuverN1(id));
+    public ResponseEntity<MissionResponse> approuverN1(@PathVariable UUID id,
+                                                       @AuthenticationPrincipal User currentUser) {
+        return ResponseEntity.ok(missionService.approuverN1(id, currentUser.getId()));
+    }
+
+    /** Historique des validations : qui a fait quoi, quand, avec quel motif. */
+    @GetMapping("/{id}/historique")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<List<EtapeHistorique>> historique(@PathVariable UUID id,
+                                                            @AuthenticationPrincipal User currentUser) {
+        return ResponseEntity.ok(missionService.historique(id, currentUser));
     }
 
     @PatchMapping("/{id}/valider")

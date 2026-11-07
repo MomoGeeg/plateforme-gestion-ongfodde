@@ -8,6 +8,9 @@ import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import ong.fodde.modules.historique.dto.EtapeHistorique;
+import ong.fodde.modules.historique.entity.TypeDemande;
+import ong.fodde.modules.historique.service.HistoriqueService;
 import ong.fodde.modules.rh.dto.DemandeCongeRequest;
 import ong.fodde.modules.rh.dto.DemandeCongeResponse;
 import ong.fodde.modules.rh.entity.DemandeConge;
@@ -25,14 +28,44 @@ public class DemandeCongeService {
 
     private final DemandeCongeRepository demandeCongeRepository;
     private final EmployeRepository employeRepository;
+    private final HistoriqueService historiqueService;
 
     public DemandeCongeService(DemandeCongeRepository demandeCongeRepository,
-                               EmployeRepository employeRepository) {
+                               EmployeRepository employeRepository,
+                               HistoriqueService historiqueService) {
         this.demandeCongeRepository = demandeCongeRepository;
         this.employeRepository = employeRepository;
+        this.historiqueService = historiqueService;
     }
 
-    public DemandeCongeResponse soumettreDemande(DemandeCongeRequest request) {
+    /** Employé concerné par la demande (le contrôle d'accès se fait dans le contrôleur). */
+    @Transactional(readOnly = true)
+    public UUID employeDeLaDemande(UUID id) {
+        return getOrThrow(id).getEmployeId();
+    }
+
+    /** Historique de la demande de congé : saisie, décision du RAF ou annulation. */
+    @Transactional(readOnly = true)
+    public List<EtapeHistorique> historique(UUID id) {
+        DemandeConge d = getOrThrow(id);
+        // Demandes traitées avant l'historique : l'approbation (qui, quand) est connue ; le rejet, sans auteur.
+        List<EtapeHistorique> anciennes = switch (d.getStatut()) {
+            case APPROUVE -> List.of(historiqueService.reconstituer(StatutConge.EN_ATTENTE, StatutConge.APPROUVE,
+                    d.getValideParRaf(), null, d.getDateValidationRaf()));
+            case EN_ATTENTE -> List.of();
+            default -> List.of(historiqueService.reconstituer(StatutConge.EN_ATTENTE, d.getStatut(),
+                    null, d.getMotifRejet(), null));
+        };
+        EtapeHistorique creation = historiqueService.reconstituer(null, StatutConge.EN_ATTENTE, null, null, d.getCreatedAt());
+        return historiqueService.historique(TypeDemande.CONGE, id, creation, anciennes);
+    }
+
+    private DemandeConge getOrThrow(UUID id) {
+        return demandeCongeRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Demande de congé non trouvée avec l'id : " + id));
+    }
+
+    public DemandeCongeResponse soumettreDemande(DemandeCongeRequest request, UUID auteurId) {
         Employe employe = employeRepository.findById(request.employeId())
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Employé non trouvé avec l'id : " + request.employeId()));
@@ -58,6 +91,7 @@ public class DemandeCongeService {
         demande.setNbJours(nbJours);
 
         DemandeConge saved = demandeCongeRepository.save(demande);
+        historiqueService.enregistrer(TypeDemande.CONGE, saved.getId(), null, StatutConge.EN_ATTENTE, auteurId, null);
         return toResponse(saved);
     }
 
@@ -83,6 +117,7 @@ public class DemandeCongeService {
         }
 
         demandeCongeRepository.save(demande);
+        historiqueService.enregistrer(TypeDemande.CONGE, id, StatutConge.EN_ATTENTE, StatutConge.APPROUVE, validateurId, null);
         return toResponse(demande);
     }
 
@@ -98,10 +133,11 @@ public class DemandeCongeService {
         demande.setMotifRejet(motif);
 
         demandeCongeRepository.save(demande);
+        historiqueService.enregistrer(TypeDemande.CONGE, id, StatutConge.EN_ATTENTE, StatutConge.REJETE, validateurId, motif);
         return toResponse(demande);
     }
 
-    public DemandeCongeResponse annuler(UUID id) {
+    public DemandeCongeResponse annuler(UUID id, UUID auteurId) {
         DemandeConge demande = demandeCongeRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Demande de congé non trouvée avec l'id : " + id));
 
@@ -112,6 +148,7 @@ public class DemandeCongeService {
         demande.setStatut(StatutConge.ANNULE);
 
         demandeCongeRepository.save(demande);
+        historiqueService.enregistrer(TypeDemande.CONGE, id, StatutConge.EN_ATTENTE, StatutConge.ANNULE, auteurId, null);
         return toResponse(demande);
     }
 

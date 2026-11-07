@@ -11,7 +11,12 @@ import ong.fodde.modules.acquisitions.dto.AcquisitionResponse;
 import ong.fodde.modules.acquisitions.entity.Acquisition;
 import ong.fodde.modules.acquisitions.entity.StatutAcquisition;
 import ong.fodde.modules.acquisitions.repository.AcquisitionRepository;
+import ong.fodde.modules.auth.entity.User;
 import ong.fodde.modules.auth.repository.UserRepository;
+import ong.fodde.modules.historique.dto.EtapeHistorique;
+import ong.fodde.modules.historique.entity.TypeDemande;
+import ong.fodde.modules.historique.service.HistoriqueService;
+import ong.fodde.shared.securite.AccesPersonnel;
 import ong.fodde.modules.projets.repository.ProjetRepository;
 import ong.fodde.shared.exception.BusinessException;
 import ong.fodde.shared.exception.ResourceNotFoundException;
@@ -25,13 +30,33 @@ public class AcquisitionService {
     private final AcquisitionRepository acquisitionRepository;
     private final UserRepository userRepository;
     private final ProjetRepository projetRepository;
+    private final HistoriqueService historiqueService;
+    private final AccesPersonnel accesPersonnel;
 
     public AcquisitionService(AcquisitionRepository acquisitionRepository,
                                UserRepository userRepository,
-                               ProjetRepository projetRepository) {
+                               ProjetRepository projetRepository,
+                               HistoriqueService historiqueService,
+                               AccesPersonnel accesPersonnel) {
         this.acquisitionRepository = acquisitionRepository;
         this.userRepository = userRepository;
         this.projetRepository = projetRepository;
+        this.historiqueService = historiqueService;
+        this.accesPersonnel = accesPersonnel;
+    }
+
+    /** Historique de l'acquisition. Visible par le demandeur et par le RAF, le SE et l'administrateur. */
+    @Transactional(readOnly = true)
+    public List<EtapeHistorique> historique(UUID id, User user) {
+        Acquisition a = getOrThrow(id);
+        accesPersonnel.verifierUtilisateur(a.getSoumisParId(), user, "ROLE_RAF", "ROLE_SE", "ROLE_ADMIN");
+        // Acquisitions traitées avant l'historique : la décision est connue, pas son auteur.
+        List<EtapeHistorique> anciennes = a.getStatut() == StatutAcquisition.EN_ATTENTE
+                ? List.of()
+                : List.of(historiqueService.reconstituer(null, a.getStatut(), null, a.getMotifRejet(), null));
+        EtapeHistorique creation = historiqueService.reconstituer(null, StatutAcquisition.EN_ATTENTE,
+                a.getSoumisParId(), null, a.getCreatedAt());
+        return historiqueService.historique(TypeDemande.ACQUISITION, id, creation, anciennes);
     }
 
     public AcquisitionResponse creerAcquisition(AcquisitionRequest request, UUID soumisParId) {
@@ -46,7 +71,9 @@ public class AcquisitionService {
         acq.setSoumisParId(soumisParId);
         acq.setStatut(StatutAcquisition.EN_ATTENTE);
 
-        return toResponse(acquisitionRepository.save(acq));
+        Acquisition saved = acquisitionRepository.save(acq);
+        historiqueService.enregistrer(TypeDemande.ACQUISITION, saved.getId(), null, StatutAcquisition.EN_ATTENTE, soumisParId, null);
+        return toResponse(saved);
     }
 
     @Transactional(readOnly = true)
@@ -72,7 +99,9 @@ public class AcquisitionService {
             throw new BusinessException("Seule une acquisition EN_ATTENTE peut être validée (statut : " + acq.getStatut() + ")");
         }
         acq.setStatut(StatutAcquisition.VALIDEE);
-        return toResponse(acquisitionRepository.save(acq));
+        Acquisition saved = acquisitionRepository.save(acq);
+        historiqueService.enregistrer(TypeDemande.ACQUISITION, id, StatutAcquisition.EN_ATTENTE, StatutAcquisition.VALIDEE, userId, null);
+        return toResponse(saved);
     }
 
     public AcquisitionResponse rejeterAcquisition(UUID id, String motif, UUID userId) {
@@ -85,7 +114,9 @@ public class AcquisitionService {
         }
         acq.setStatut(StatutAcquisition.REJETEE);
         acq.setMotifRejet(motif);
-        return toResponse(acquisitionRepository.save(acq));
+        Acquisition saved = acquisitionRepository.save(acq);
+        historiqueService.enregistrer(TypeDemande.ACQUISITION, id, StatutAcquisition.EN_ATTENTE, StatutAcquisition.REJETEE, userId, motif);
+        return toResponse(saved);
     }
 
     private Acquisition getOrThrow(UUID id) {

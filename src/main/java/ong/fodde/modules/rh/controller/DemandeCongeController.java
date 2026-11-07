@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import jakarta.validation.Valid;
 import ong.fodde.modules.auth.entity.User;
+import ong.fodde.modules.historique.dto.EtapeHistorique;
 import ong.fodde.modules.rh.dto.DemandeCongeRequest;
 import ong.fodde.modules.rh.dto.DemandeCongeResponse;
 import ong.fodde.modules.rh.service.DemandeCongeService;
@@ -37,8 +38,20 @@ public class DemandeCongeController {
 
     @PostMapping
     @PreAuthorize("hasAuthority('ROLE_RH') or hasAuthority('ROLE_ADMIN')")
-    public ResponseEntity<DemandeCongeResponse> soumettreDemande(@Valid @RequestBody DemandeCongeRequest request) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(demandeCongeService.soumettreDemande(request));
+    public ResponseEntity<DemandeCongeResponse> soumettreDemande(@Valid @RequestBody DemandeCongeRequest request,
+                                                                 @AuthenticationPrincipal User currentUser) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(
+                demandeCongeService.soumettreDemande(request, currentUser.getId()));
+    }
+
+    /** Historique des validations : réservé à l'employé concerné et aux rôles de gestion. */
+    @GetMapping("/{id}/historique")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<List<EtapeHistorique>> historique(@PathVariable UUID id,
+                                                            @AuthenticationPrincipal User currentUser) {
+        accesPersonnel.verifierEmploye(demandeCongeService.employeDeLaDemande(id), currentUser,
+                "ROLE_RH", "ROLE_ADMIN", "ROLE_RAF", "ROLE_SE", "ROLE_RESPONSABLE_PROGRAMMES");
+        return ResponseEntity.ok(demandeCongeService.historique(id));
     }
 
     @PatchMapping("/{id}/approuver")
@@ -60,8 +73,9 @@ public class DemandeCongeController {
 
     @PatchMapping("/{id}/annuler")
     @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<DemandeCongeResponse> annuler(@PathVariable UUID id) {
-        return ResponseEntity.ok(demandeCongeService.annuler(id));
+    public ResponseEntity<DemandeCongeResponse> annuler(@PathVariable UUID id,
+                                                         @AuthenticationPrincipal User currentUser) {
+        return ResponseEntity.ok(demandeCongeService.annuler(id, currentUser.getId()));
     }
 
     @GetMapping
