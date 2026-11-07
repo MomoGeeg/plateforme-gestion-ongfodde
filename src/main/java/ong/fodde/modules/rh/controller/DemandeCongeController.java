@@ -84,6 +84,16 @@ public class DemandeCongeController {
         return ResponseEntity.ok(demandeCongeService.listerTous());
     }
 
+    /**
+     * Congés de l'utilisateur connecté, retrouvés par la fiche employé liée à son compte.
+     * Liste vide si aucune fiche n'est liée (voir GET /api/employes/moi).
+     */
+    @GetMapping("/mes-conges")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<List<DemandeCongeResponse>> mesCongesConnecte(@AuthenticationPrincipal User currentUser) {
+        return ResponseEntity.ok(demandeCongeService.mesCongesUtilisateur(currentUser.getId()));
+    }
+
     @GetMapping("/mes-conges/{employeId}")
     @PreAuthorize("isAuthenticated()")
     public ResponseEntity<List<DemandeCongeResponse>> mesConges(@PathVariable UUID employeId,

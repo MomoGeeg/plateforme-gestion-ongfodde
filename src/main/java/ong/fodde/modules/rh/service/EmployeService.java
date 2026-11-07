@@ -1,11 +1,13 @@
 package ong.fodde.modules.rh.service;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import ong.fodde.modules.auth.repository.UserRepository;
 import ong.fodde.modules.rh.dto.EmployeRequest;
 import ong.fodde.modules.rh.dto.EmployeResponse;
 import ong.fodde.modules.rh.entity.Contrat;
@@ -23,15 +25,21 @@ public class EmployeService {
 
     private final EmployeRepository employeRepository;
     private final ContratRepository contratRepository;
+    private final UserRepository userRepository;
 
-    public EmployeService(EmployeRepository employeRepository, ContratRepository contratRepository) {
+    public EmployeService(EmployeRepository employeRepository, ContratRepository contratRepository,
+                          UserRepository userRepository) {
         this.employeRepository = employeRepository;
         this.contratRepository = contratRepository;
+        this.userRepository = userRepository;
     }
 
     public EmployeResponse creerEmploye(EmployeRequest request) {
         if (employeRepository.existsByMatricule(request.matricule())) {
             throw new BusinessException("Un employé avec le matricule '" + request.matricule() + "' existe déjà");
+        }
+        if (request.userId() != null) {
+            verifierCompteLibre(request.userId(), null);
         }
 
         Employe employe = new Employe();
@@ -68,6 +76,12 @@ public class EmployeService {
         return toResponse(employe);
     }
 
+    /** Fiche employé liée au compte, si l'administrateur l'a associée. */
+    @Transactional(readOnly = true)
+    public Optional<EmployeResponse> maFiche(UUID userId) {
+        return employeRepository.findByUserId(userId).map(this::toResponse);
+    }
+
     @Transactional(readOnly = true)
     public EmployeResponse obtenirEmployeParUserId(UUID userId) {
         Employe employe = employeRepository.findByUserId(userId)
@@ -83,11 +97,46 @@ public class EmployeService {
                 .toList();
     }
 
+    /**
+     * Lie une fiche employé à un compte : la personne voit alors ses congés et son solde.
+     * Un compte ne peut être lié qu'à une fiche, et une fiche qu'à un compte.
+     */
     public EmployeResponse associerCompte(UUID id, UUID userId) {
+        if (userId == null) {
+            throw new BusinessException("Choisissez le compte à associer");
+        }
         Employe employe = employeRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Employé non trouvé avec l'id : " + id));
+        if (userId.equals(employe.getUserId())) {
+            return toResponse(employe);
+        }
+        if (employe.getUserId() != null) {
+            throw new BusinessException("Cette fiche est déjà liée à un autre compte : dissociez-la d'abord");
+        }
+        verifierCompteLibre(userId, id);
         employe.setUserId(userId);
         return toResponse(employeRepository.save(employe));
+    }
+
+    /** Retire le lien entre la fiche et son compte (erreur d'association, départ…). */
+    public EmployeResponse dissocierCompte(UUID id) {
+        Employe employe = employeRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Employé non trouvé avec l'id : " + id));
+        employe.setUserId(null);
+        return toResponse(employeRepository.save(employe));
+    }
+
+    /** Le compte doit exister et ne pas être déjà lié à une autre fiche. */
+    private void verifierCompteLibre(UUID userId, UUID employeId) {
+        if (!userRepository.existsById(userId)) {
+            throw new ResourceNotFoundException("Compte utilisateur introuvable : " + userId);
+        }
+        employeRepository.findByUserId(userId)
+                .filter(autre -> !autre.getId().equals(employeId))
+                .ifPresent(autre -> {
+                    throw new BusinessException("Ce compte est déjà lié à la fiche de "
+                            + autre.getPrenom() + " " + autre.getNom());
+                });
     }
 
     public EmployeResponse changerStatut(UUID id, StatutEmploye statut) {
