@@ -21,6 +21,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import jakarta.validation.Valid;
 import ong.fodde.modules.auth.entity.User;
 import ong.fodde.shared.securite.AccesPersonnel;
+import ong.fodde.modules.rh.dto.CompteSansFicheResponse;
 import ong.fodde.modules.rh.dto.EmployeRequest;
 import ong.fodde.modules.rh.dto.EmployeResponse;
 import ong.fodde.modules.rh.entity.StatutEmploye;
@@ -54,6 +55,13 @@ public class EmployeController {
     @PreAuthorize("hasAuthority('ROLE_RH') or hasAuthority('ROLE_ADMIN') or hasAuthority('ROLE_SE') or hasAuthority('ROLE_RAF') or hasAuthority('ROLE_COMPTABLE') or hasAuthority('ROLE_RESPONSABLE_PROGRAMMES')")
     public ResponseEntity<List<EmployeResponse>> listerEmployes() {
         return ResponseEntity.ok(employeService.listerEmployes());
+    }
+
+    /** Comptes de la plateforme sans fiche employé : les RH créent la fiche, déjà liée au compte. */
+    @GetMapping("/comptes-sans-fiche")
+    @PreAuthorize("hasAuthority('ROLE_RH') or hasAuthority('ROLE_ADMIN')")
+    public ResponseEntity<List<CompteSansFicheResponse>> listerComptesSansFiche() {
+        return ResponseEntity.ok(employeService.listerComptesSansFiche());
     }
 
     @GetMapping("/sans-user")

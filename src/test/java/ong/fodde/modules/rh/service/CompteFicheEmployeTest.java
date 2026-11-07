@@ -109,6 +109,34 @@ class CompteFicheEmployeTest {
         assertTrue(service.maFiche(UUID.randomUUID()).isEmpty());
     }
 
+    // ── Comptes sans fiche (à compléter par les RH) ────────────────────────
+
+    private static ong.fodde.modules.auth.entity.User compte(String prenom, String nom,
+            ong.fodde.modules.auth.entity.StatutUser statut) {
+        ong.fodde.modules.auth.entity.User u = new ong.fodde.modules.auth.entity.User();
+        u.setId(UUID.randomUUID());
+        u.setPrenom(prenom);
+        u.setNom(nom);
+        u.setEmail(prenom.toLowerCase() + "@fodde.org");
+        u.setStatut(statut);
+        return u;
+    }
+
+    @Test
+    void lesComptesSansFicheExcluentLesComptesLiesEtDesactives() {
+        var lie = compte("Awa", "Diallo", ong.fodde.modules.auth.entity.StatutUser.ACTIF);
+        var libre = compte("Ibrahima", "Sow", ong.fodde.modules.auth.entity.StatutUser.ACTIF);
+        var enAttente = compte("Moussa", "Ba", ong.fodde.modules.auth.entity.StatutUser.EN_ATTENTE);
+        var desactive = compte("Fatou", "Ndiaye", ong.fodde.modules.auth.entity.StatutUser.INACTIF);
+        Employe e = new Employe();
+        e.setUserId(lie.getId());
+        when(employes.findAll()).thenReturn(List.of(e));
+        when(users.findAll()).thenReturn(List.of(lie, libre, enAttente, desactive));
+
+        var resultat = service.listerComptesSansFiche();
+        assertEquals(List.of("Ba", "Sow"), resultat.stream().map(c -> c.nom()).toList());
+    }
+
     // ── Mes congés ─────────────────────────────────────────────────────────
 
     private final DemandeCongeRepository conges = mock(DemandeCongeRepository.class);

@@ -1,13 +1,19 @@
 package ong.fodde.modules.rh.service;
 
+import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import ong.fodde.modules.auth.entity.StatutUser;
+import ong.fodde.modules.auth.entity.User;
 import ong.fodde.modules.auth.repository.UserRepository;
+import ong.fodde.modules.rh.dto.CompteSansFicheResponse;
 import ong.fodde.modules.rh.dto.EmployeRequest;
 import ong.fodde.modules.rh.dto.EmployeResponse;
 import ong.fodde.modules.rh.entity.Contrat;
@@ -87,6 +93,27 @@ public class EmployeService {
         Employe employe = employeRepository.findByUserId(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("Employé non trouvé avec le userId : " + userId));
         return toResponse(employe);
+    }
+
+    /**
+     * Comptes sans fiche employé (hors comptes désactivés), triés par nom :
+     * chaque personne qui a un compte doit avoir sa fiche, créée par les RH.
+     */
+    @Transactional(readOnly = true)
+    public List<CompteSansFicheResponse> listerComptesSansFiche() {
+        Set<UUID> lies = employeRepository.findAll().stream()
+                .map(Employe::getUserId)
+                .filter(java.util.Objects::nonNull)
+                .collect(Collectors.toSet());
+        return userRepository.findAll().stream()
+                .filter(u -> !lies.contains(u.getId()))
+                .filter(u -> u.getStatut() != StatutUser.INACTIF)
+                .sorted(Comparator.comparing((User u) -> u.getNom().toLowerCase())
+                        .thenComparing(u -> u.getPrenom().toLowerCase()))
+                .map(u -> new CompteSansFicheResponse(u.getId(), u.getNom(), u.getPrenom(), u.getEmail(),
+                        u.getTelephone(), u.getService(), u.getStatut(),
+                        u.getRoles().stream().map(r -> r.getNom()).sorted().toList()))
+                .toList();
     }
 
     @Transactional(readOnly = true)
