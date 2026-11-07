@@ -8,6 +8,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -19,6 +20,7 @@ import ong.fodde.modules.financier.entity.LigneBudgetaire;
 import ong.fodde.modules.financier.entity.StatutDepense;
 import ong.fodde.modules.financier.repository.DepenseRepository;
 import ong.fodde.modules.financier.repository.LigneBudgetaireRepository;
+import ong.fodde.modules.financier.repository.PieceJustificativeRepository;
 import ong.fodde.modules.projets.entity.Projet;
 import ong.fodde.modules.projets.entity.StatutProjet;
 import ong.fodde.modules.projets.repository.ProjetRepository;
@@ -50,14 +52,22 @@ public class DepenseService {
     private long compteurDepense = 0;
     private int anneeCompteur = 0;
 
+    private final PieceJustificativeRepository pieceRepository;
+    /** Au-delà de ce montant, une dépense ne peut être soumise sans pièce justificative. */
+    private final BigDecimal seuilPieceJustificative;
+
     public DepenseService(DepenseRepository depenseRepository,
                            LigneBudgetaireRepository ligneBudgetaireRepository,
                            ProjetRepository projetRepository,
-                           UserRepository userRepository) {
+                           UserRepository userRepository,
+                           PieceJustificativeRepository pieceRepository,
+                           @Value("${app.depenses.seuil-piece-justificative:100000}") BigDecimal seuilPieceJustificative) {
         this.depenseRepository = depenseRepository;
         this.ligneBudgetaireRepository = ligneBudgetaireRepository;
         this.projetRepository = projetRepository;
         this.userRepository = userRepository;
+        this.pieceRepository = pieceRepository;
+        this.seuilPieceJustificative = seuilPieceJustificative;
     }
 
     public DepenseResponse soumettreDepense(DepenseRequest request, UUID userId) {
@@ -147,6 +157,15 @@ public class DepenseService {
         // Motif obligatoire pour un rejet
         if (nouveauStatut == StatutDepense.REJETEE && (motif == null || motif.isBlank())) {
             throw new BusinessException("Le motif de rejet est obligatoire");
+        }
+
+        // Pièce justificative obligatoire au-delà du seuil, dès la soumission
+        if (nouveauStatut == StatutDepense.SOUMISE
+                && depense.getMontant() != null
+                && depense.getMontant().compareTo(seuilPieceJustificative) > 0
+                && pieceRepository.countByDepenseId(id) == 0) {
+            throw new BusinessException("Joignez au moins une pièce justificative (facture, reçu) : obligatoire au-delà de "
+                + String.format("%,d", seuilPieceJustificative.longValue()).replace(',', ' ') + " F CFA.");
         }
 
         depense.setStatut(nouveauStatut);
