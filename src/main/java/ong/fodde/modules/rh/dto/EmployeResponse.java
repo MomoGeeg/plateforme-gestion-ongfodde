@@ -4,6 +4,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
+import ong.fodde.modules.rh.entity.Pole;
 import ong.fodde.modules.rh.entity.StatutEmploye;
 import ong.fodde.modules.rh.entity.TypeContrat;
 
@@ -22,7 +23,9 @@ public record EmployeResponse(
         String departement,
         LocalDate dateEmbauche,
         StatutEmploye statut,
-        UUID superviseurId,
+        Pole pole,
+        UUID superieurId,
+        String superieurNom,
         LocalDateTime createdAt,
         // Enrichi depuis le contrat actif (peut être null)
         TypeContrat typeContrat,

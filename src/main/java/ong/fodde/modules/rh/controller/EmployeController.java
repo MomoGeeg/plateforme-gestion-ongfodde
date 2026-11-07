@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -25,7 +26,10 @@ import ong.fodde.modules.rh.dto.CompteSansFicheResponse;
 import ong.fodde.modules.rh.dto.EmployeRequest;
 import ong.fodde.modules.rh.dto.EmployeResponse;
 import ong.fodde.modules.rh.entity.StatutEmploye;
+import ong.fodde.modules.rh.dto.OrganisationDtos.NoeudOrganigramme;
+import ong.fodde.modules.rh.dto.OrganisationDtos.PropositionRattachement;
 import ong.fodde.modules.rh.service.EmployeService;
+import ong.fodde.modules.rh.service.OrganisationService;
 
 @RestController
 @RequestMapping("/api/employes")
@@ -37,11 +41,36 @@ public class EmployeController {
     };
 
     private final EmployeService employeService;
+    private final OrganisationService organisationService;
     private final AccesPersonnel accesPersonnel;
 
-    public EmployeController(EmployeService employeService, AccesPersonnel accesPersonnel) {
+    public EmployeController(EmployeService employeService, OrganisationService organisationService,
+                             AccesPersonnel accesPersonnel) {
         this.employeService = employeService;
+        this.organisationService = organisationService;
         this.accesPersonnel = accesPersonnel;
+    }
+
+    /** Modifie la fiche (identité, poste, pôle, supérieur direct). */
+    @PutMapping("/{id}")
+    @PreAuthorize("hasAuthority('ROLE_RH') or hasAuthority('ROLE_ADMIN')")
+    public ResponseEntity<EmployeResponse> modifierEmploye(@PathVariable UUID id,
+                                                           @Valid @RequestBody EmployeRequest request) {
+        return ResponseEntity.ok(employeService.modifierEmploye(id, request));
+    }
+
+    /** Pôle et supérieur proposés d'après les rôles du compte (formulaire RH). */
+    @GetMapping("/proposition-rattachement")
+    @PreAuthorize("hasAuthority('ROLE_RH') or hasAuthority('ROLE_ADMIN')")
+    public ResponseEntity<PropositionRattachement> proposerRattachement(@RequestParam UUID userId) {
+        return ResponseEntity.ok(organisationService.proposer(userId));
+    }
+
+    /** Organigramme : employés actifs avec leur poste, pôle et supérieur (pas de donnée personnelle). */
+    @GetMapping("/organigramme")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<List<NoeudOrganigramme>> organigramme() {
+        return ResponseEntity.ok(organisationService.organigramme());
     }
 
     @PostMapping
