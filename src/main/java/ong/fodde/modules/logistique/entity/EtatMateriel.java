@@ -1,6 +1,7 @@
 package ong.fodde.modules.logistique.entity;
 
-public enum EtatBien {
+/** État d'un bien ou d'un véhicule (type PostgreSQL {@code etat_materiel}). */
+public enum EtatMateriel {
     NEUF,
     BON_ETAT,
     USE,

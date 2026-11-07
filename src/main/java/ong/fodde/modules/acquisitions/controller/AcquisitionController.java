@@ -34,8 +34,9 @@ public class AcquisitionController {
         this.acquisitionService = acquisitionService;
     }
 
+    /** Toutes les acquisitions ; la logistique en a besoin pour inventorier celles qui sont validées. */
     @GetMapping
-    @PreAuthorize("hasAuthority('ROLE_RAF') or hasAuthority('ROLE_SE') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('ROLE_RAF') or hasAuthority('ROLE_SE') or hasAuthority('ROLE_ADMIN') or hasAuthority('ROLE_RESPONSABLE_LOGISTIQUE')")
     public ResponseEntity<List<AcquisitionResponse>> listerToutesAcquisitions() {
         return ResponseEntity.ok(acquisitionService.listerToutesAcquisitions());
     }
