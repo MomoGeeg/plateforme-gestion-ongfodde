@@ -22,6 +22,7 @@ import jakarta.validation.Valid;
 import ong.fodde.modules.auth.entity.User;
 import ong.fodde.modules.financier.dto.DepenseRequest;
 import ong.fodde.modules.financier.dto.DepenseResponse;
+import ong.fodde.modules.historique.dto.EtapeHistorique;
 import ong.fodde.modules.financier.entity.StatutDepense;
 import ong.fodde.modules.financier.service.DepenseService;
 
@@ -75,6 +76,14 @@ public class DepenseController {
     @PreAuthorize("isAuthenticated()")
     public ResponseEntity<DepenseResponse> getDepense(@PathVariable UUID id) {
         return ResponseEntity.ok(depenseService.getDepenseById(id));
+    }
+
+    /** Historique des validations : qui a fait quoi, quand, avec quel motif. */
+    @GetMapping("/{id}/historique")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<List<EtapeHistorique>> historique(@PathVariable UUID id,
+                                                            @AuthenticationPrincipal User currentUser) {
+        return ResponseEntity.ok(depenseService.historique(id, currentUser));
     }
 
     @GetMapping("/mes-depenses")

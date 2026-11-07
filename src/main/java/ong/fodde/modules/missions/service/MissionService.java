@@ -6,7 +6,12 @@ import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import ong.fodde.modules.auth.entity.User;
 import ong.fodde.modules.auth.repository.UserRepository;
+import ong.fodde.modules.historique.dto.EtapeHistorique;
+import ong.fodde.modules.historique.entity.TypeDemande;
+import ong.fodde.modules.historique.service.HistoriqueService;
+import ong.fodde.shared.securite.AccesPersonnel;
 import ong.fodde.modules.missions.dto.MissionRequest;
 import ong.fodde.modules.missions.dto.MissionResponse;
 import ong.fodde.modules.missions.entity.Mission;
@@ -25,13 +30,40 @@ public class MissionService {
     private final MissionRepository missionRepository;
     private final UserRepository userRepository;
     private final ProjetRepository projetRepository;
+    private final HistoriqueService historiqueService;
+    private final AccesPersonnel accesPersonnel;
 
     public MissionService(MissionRepository missionRepository,
                           UserRepository userRepository,
-                          ProjetRepository projetRepository) {
+                          ProjetRepository projetRepository,
+                          HistoriqueService historiqueService,
+                          AccesPersonnel accesPersonnel) {
         this.missionRepository = missionRepository;
         this.userRepository = userRepository;
         this.projetRepository = projetRepository;
+        this.historiqueService = historiqueService;
+        this.accesPersonnel = accesPersonnel;
+    }
+
+    /**
+     * Historique de la mission. Visible par l'employé concerné, la personne qui l'a
+     * saisie, et les rôles qui voient toutes les missions.
+     */
+    @Transactional(readOnly = true)
+    public List<EtapeHistorique> historique(UUID id, User user) {
+        Mission m = getOrThrow(id);
+        if (!user.getId().equals(m.getCreatedBy())) {
+            accesPersonnel.verifierUtilisateur(m.getEmployeId(), user,
+                    "ROLE_RAF", "ROLE_SE", "ROLE_ADMIN", "ROLE_RESPONSABLE_PROGRAMMES");
+        }
+        // Missions traitées avant l'historique : seul le rejet (avec son motif) est connu.
+        List<EtapeHistorique> anciennes = m.getStatut() == StatutMission.REJETEE
+                ? List.of(historiqueService.reconstituer(null, StatutMission.REJETEE, null, m.getMotifRejet(), null))
+                : m.getStatut() == StatutMission.SOUMISE ? List.of()
+                : List.of(historiqueService.reconstituer(null, m.getStatut(), null, null, null));
+        EtapeHistorique creation = historiqueService.reconstituer(null, StatutMission.SOUMISE,
+                m.getCreatedBy(), null, m.getCreatedAt());
+        return historiqueService.historique(TypeDemande.MISSION, id, creation, anciennes);
     }
 
     public MissionResponse soumettreDemandesMission(MissionRequest request, UUID createdBy) {
@@ -46,7 +78,9 @@ public class MissionService {
         mission.setStatut(StatutMission.SOUMISE);
         mission.setCreatedBy(createdBy);
 
-        return toResponse(missionRepository.save(mission));
+        Mission saved = missionRepository.save(mission);
+        historiqueService.enregistrer(TypeDemande.MISSION, saved.getId(), null, StatutMission.SOUMISE, createdBy, null);
+        return toResponse(saved);
     }
 
     @Transactional(readOnly = true)
@@ -72,13 +106,15 @@ public class MissionService {
     }
 
     /** N+1 approves the mission request */
-    public MissionResponse approuverN1(UUID id) {
+    public MissionResponse approuverN1(UUID id, UUID userId) {
         Mission mission = getOrThrow(id);
         if (mission.getStatut() != StatutMission.SOUMISE) {
             throw new BusinessException("Seule une mission SOUMISE peut être approuvée N+1 (statut : " + mission.getStatut() + ")");
         }
         mission.setStatut(StatutMission.APPROUVEE_N1);
-        return toResponse(missionRepository.save(mission));
+        Mission saved = missionRepository.save(mission);
+        historiqueService.enregistrer(TypeDemande.MISSION, id, StatutMission.SOUMISE, StatutMission.APPROUVEE_N1, userId, null);
+        return toResponse(saved);
     }
 
     /** RAF validates the mission (from SOUMISE or APPROUVEE_N1) */
@@ -87,8 +123,11 @@ public class MissionService {
         if (mission.getStatut() != StatutMission.SOUMISE && mission.getStatut() != StatutMission.APPROUVEE_N1) {
             throw new BusinessException("Seule une mission SOUMISE ou APPROUVEE_N1 peut être validée (statut : " + mission.getStatut() + ")");
         }
+        StatutMission avant = mission.getStatut();
         mission.setStatut(StatutMission.VALIDEE_RAF);
-        return toResponse(missionRepository.save(mission));
+        Mission saved = missionRepository.save(mission);
+        historiqueService.enregistrer(TypeDemande.MISSION, id, avant, StatutMission.VALIDEE_RAF, userId, null);
+        return toResponse(saved);
     }
 
     /** RAF or N+1 rejects the mission */
@@ -100,9 +139,12 @@ public class MissionService {
         if (motif == null || motif.isBlank()) {
             throw new BusinessException("Le motif de rejet est obligatoire");
         }
+        StatutMission avant = mission.getStatut();
         mission.setStatut(StatutMission.REJETEE);
         mission.setMotifRejet(motif);
-        return toResponse(missionRepository.save(mission));
+        Mission saved = missionRepository.save(mission);
+        historiqueService.enregistrer(TypeDemande.MISSION, id, avant, StatutMission.REJETEE, userId, motif);
+        return toResponse(saved);
     }
 
     private Mission getOrThrow(UUID id) {

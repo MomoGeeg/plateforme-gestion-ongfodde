@@ -18,7 +18,9 @@ import ong.fodde.modules.financier.entity.StatutDepense;
 import ong.fodde.modules.financier.repository.DepenseRepository;
 import ong.fodde.modules.financier.repository.LigneBudgetaireRepository;
 import ong.fodde.modules.financier.repository.PieceJustificativeRepository;
+import ong.fodde.modules.historique.service.HistoriqueService;
 import ong.fodde.modules.projets.repository.ProjetRepository;
+import ong.fodde.shared.securite.AccesPersonnel;
 import ong.fodde.shared.exception.BusinessException;
 
 /** Règle : au-delà du seuil, une dépense ne peut être soumise sans pièce justificative. */
@@ -27,7 +29,8 @@ class DepenseServicePieceTest {
     private final DepenseRepository depenses = mock(DepenseRepository.class);
     private final PieceJustificativeRepository pieces = mock(PieceJustificativeRepository.class);
     private final DepenseService service = new DepenseService(depenses, mock(LigneBudgetaireRepository.class),
-        mock(ProjetRepository.class), mock(UserRepository.class), pieces, new BigDecimal("100000"));
+        mock(ProjetRepository.class), mock(UserRepository.class), pieces,
+        mock(HistoriqueService.class), mock(AccesPersonnel.class), new BigDecimal("100000"));
 
     private UUID brouillon(String montant) {
         Depense d = new Depense();

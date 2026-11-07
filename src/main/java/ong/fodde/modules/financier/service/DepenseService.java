@@ -12,7 +12,12 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import ong.fodde.modules.auth.entity.User;
 import ong.fodde.modules.auth.repository.UserRepository;
+import ong.fodde.modules.historique.dto.EtapeHistorique;
+import ong.fodde.modules.historique.entity.TypeDemande;
+import ong.fodde.modules.historique.service.HistoriqueService;
+import ong.fodde.shared.securite.AccesPersonnel;
 import ong.fodde.modules.financier.dto.DepenseRequest;
 import ong.fodde.modules.financier.dto.DepenseResponse;
 import ong.fodde.modules.financier.entity.Depense;
@@ -55,18 +60,24 @@ public class DepenseService {
     private final PieceJustificativeRepository pieceRepository;
     /** Au-delà de ce montant, une dépense ne peut être soumise sans pièce justificative. */
     private final BigDecimal seuilPieceJustificative;
+    private final HistoriqueService historiqueService;
+    private final AccesPersonnel accesPersonnel;
 
     public DepenseService(DepenseRepository depenseRepository,
                            LigneBudgetaireRepository ligneBudgetaireRepository,
                            ProjetRepository projetRepository,
                            UserRepository userRepository,
                            PieceJustificativeRepository pieceRepository,
+                           HistoriqueService historiqueService,
+                           AccesPersonnel accesPersonnel,
                            @Value("${app.depenses.seuil-piece-justificative:100000}") BigDecimal seuilPieceJustificative) {
         this.depenseRepository = depenseRepository;
         this.ligneBudgetaireRepository = ligneBudgetaireRepository;
         this.projetRepository = projetRepository;
         this.userRepository = userRepository;
         this.pieceRepository = pieceRepository;
+        this.historiqueService = historiqueService;
+        this.accesPersonnel = accesPersonnel;
         this.seuilPieceJustificative = seuilPieceJustificative;
     }
 
@@ -118,6 +129,7 @@ public class DepenseService {
         depense.setSaisiParId(userId);
 
         Depense saved = depenseRepository.save(depense);
+        historiqueService.enregistrer(TypeDemande.DEPENSE, saved.getId(), null, StatutDepense.BROUILLON, userId, null);
         return toResponse(saved);
     }
 
@@ -181,6 +193,7 @@ public class DepenseService {
         }
 
         Depense saved = depenseRepository.save(depense);
+        historiqueService.enregistrer(TypeDemande.DEPENSE, id, statutActuel, nouveauStatut, userId, motif);
 
         // Mise à jour du montant dépensé sur la ligne budgétaire lors de la validation
         if (nouveauStatut == StatutDepense.VALIDEE) {
@@ -241,9 +254,40 @@ public class DepenseService {
             ligneBudgetaireRepository.save(ligne);
         }
 
+        StatutDepense statutAvant = depense.getStatut();
         depense.setStatut(StatutDepense.ANNULEE);
         depense.setMotifRejet(motif);
-        return toResponse(depenseRepository.save(depense));
+        Depense saved = depenseRepository.save(depense);
+        historiqueService.enregistrer(TypeDemande.DEPENSE, id, statutAvant, StatutDepense.ANNULEE, userId, motif);
+        return toResponse(saved);
+    }
+
+    /**
+     * Historique de la dépense : qui l'a saisie, vérifiée, validée ou rejetée, et quand.
+     * Visible par son auteur et par le RAF, le SE et l'administrateur.
+     */
+    @Transactional(readOnly = true)
+    public List<EtapeHistorique> historique(UUID id, User user) {
+        Depense d = depenseRepository.findById(id)
+            .orElseThrow(() -> new ResourceNotFoundException("Dépense introuvable : " + id));
+        accesPersonnel.verifierUtilisateur(d.getSaisiParId(), user, "ROLE_RAF", "ROLE_SE", "ROLE_ADMIN");
+
+        // Dépenses traitées avant l'historique : on reconstitue ce que les champs permettent.
+        List<EtapeHistorique> anciennes = new java.util.ArrayList<>();
+        if (d.getVerifiePar() != null) {
+            anciennes.add(historiqueService.reconstituer(StatutDepense.SOUMISE, StatutDepense.VERIFIEE,
+                d.getVerifiePar(), null, null));
+        }
+        if (d.getValidePar() != null) {
+            anciennes.add(historiqueService.reconstituer(null, StatutDepense.VALIDEE,
+                d.getValidePar(), null, d.getStatut() == StatutDepense.VALIDEE ? d.getUpdatedAt() : null));
+        }
+        if (d.getStatut() == StatutDepense.REJETEE || d.getStatut() == StatutDepense.ANNULEE) {
+            anciennes.add(historiqueService.reconstituer(null, d.getStatut(), null, d.getMotifRejet(), d.getUpdatedAt()));
+        }
+        EtapeHistorique creation = historiqueService.reconstituer(null, StatutDepense.BROUILLON,
+            d.getSaisiParId(), null, d.getCreatedAt());
+        return historiqueService.historique(TypeDemande.DEPENSE, id, creation, anciennes);
     }
 
     private DepenseResponse toResponse(Depense depense) {

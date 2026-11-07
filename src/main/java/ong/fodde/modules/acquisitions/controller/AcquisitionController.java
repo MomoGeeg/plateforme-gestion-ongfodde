@@ -22,6 +22,7 @@ import ong.fodde.modules.auth.entity.User;
 import ong.fodde.modules.acquisitions.dto.AcquisitionRequest;
 import ong.fodde.modules.acquisitions.dto.AcquisitionResponse;
 import ong.fodde.modules.acquisitions.service.AcquisitionService;
+import ong.fodde.modules.historique.dto.EtapeHistorique;
 
 @RestController
 @RequestMapping("/api/acquisitions")
@@ -44,6 +45,14 @@ public class AcquisitionController {
     @PreAuthorize("isAuthenticated()")
     public ResponseEntity<List<AcquisitionResponse>> mesAcquisitions(@AuthenticationPrincipal User currentUser) {
         return ResponseEntity.ok(acquisitionService.mesAcquisitions(currentUser.getId()));
+    }
+
+    /** Historique des validations : qui a fait quoi, quand, avec quel motif. */
+    @GetMapping("/{id}/historique")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<List<EtapeHistorique>> historique(@PathVariable UUID id,
+                                                            @AuthenticationPrincipal User currentUser) {
+        return ResponseEntity.ok(acquisitionService.historique(id, currentUser));
     }
 
     @PostMapping
