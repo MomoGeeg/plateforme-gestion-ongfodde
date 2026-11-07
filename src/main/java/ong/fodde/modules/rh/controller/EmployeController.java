@@ -16,7 +16,11 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+
 import jakarta.validation.Valid;
+import ong.fodde.modules.auth.entity.User;
+import ong.fodde.shared.securite.AccesPersonnel;
 import ong.fodde.modules.rh.dto.EmployeRequest;
 import ong.fodde.modules.rh.dto.EmployeResponse;
 import ong.fodde.modules.rh.entity.StatutEmploye;
@@ -26,10 +30,17 @@ import ong.fodde.modules.rh.service.EmployeService;
 @RequestMapping("/api/employes")
 public class EmployeController {
 
-    private final EmployeService employeService;
+    /** Rôles qui voient la liste des employés (mêmes droits que GET /api/employes). */
+    private static final String[] ROLES_GESTION = {
+        "ROLE_RH", "ROLE_ADMIN", "ROLE_SE", "ROLE_RAF", "ROLE_COMPTABLE", "ROLE_RESPONSABLE_PROGRAMMES"
+    };
 
-    public EmployeController(EmployeService employeService) {
+    private final EmployeService employeService;
+    private final AccesPersonnel accesPersonnel;
+
+    public EmployeController(EmployeService employeService, AccesPersonnel accesPersonnel) {
         this.employeService = employeService;
+        this.accesPersonnel = accesPersonnel;
     }
 
     @PostMapping
@@ -51,9 +62,21 @@ public class EmployeController {
         return ResponseEntity.ok(employeService.listerEmployesSansCompte());
     }
 
+    /** Fiche de l'utilisateur connecté (solde de congés…) ; 204 si aucune fiche n'est liée à son compte. */
+    @GetMapping("/moi")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<EmployeResponse> maFiche(@AuthenticationPrincipal User currentUser) {
+        return employeService.maFiche(currentUser.getId())
+                .map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.noContent().build());
+    }
+
+    /** Fiche d'un employé : l'intéressé lui-même ou les rôles qui voient la liste des employés. */
     @GetMapping("/{id}")
     @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<EmployeResponse> obtenirEmploye(@PathVariable UUID id) {
+    public ResponseEntity<EmployeResponse> obtenirEmploye(@PathVariable UUID id,
+                                                          @AuthenticationPrincipal User currentUser) {
+        accesPersonnel.verifierEmploye(id, currentUser, ROLES_GESTION);
         return ResponseEntity.ok(employeService.obtenirEmploye(id));
     }
 
@@ -69,5 +92,11 @@ public class EmployeController {
     public ResponseEntity<EmployeResponse> associerCompte(@PathVariable UUID id,
                                                            @RequestBody Map<String, UUID> body) {
         return ResponseEntity.ok(employeService.associerCompte(id, body.get("userId")));
+    }
+
+    @PatchMapping("/{id}/dissocier-compte")
+    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
+    public ResponseEntity<EmployeResponse> dissocierCompte(@PathVariable UUID id) {
+        return ResponseEntity.ok(employeService.dissocierCompte(id));
     }
 }

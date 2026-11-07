@@ -159,6 +159,14 @@ public class DemandeCongeService {
                 .toList();
     }
 
+    /** Congés de la personne dont la fiche employé est liée à ce compte ; liste vide sinon. */
+    @Transactional(readOnly = true)
+    public List<DemandeCongeResponse> mesCongesUtilisateur(UUID userId) {
+        return employeRepository.findByUserId(userId)
+                .map(e -> mesConges(e.getId()))
+                .orElse(List.of());
+    }
+
     @Transactional(readOnly = true)
     public List<DemandeCongeResponse> listerTous() {
         return demandeCongeRepository.findAll().stream()
