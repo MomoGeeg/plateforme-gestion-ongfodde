@@ -50,7 +50,8 @@ public class MissionController {
     @PreAuthorize("isAuthenticated()")
     public ResponseEntity<MissionResponse> soumettreMission(
             @Valid @RequestBody MissionRequest request,
-            @RequestParam(required = false) UUID userId) {
+            @AuthenticationPrincipal User currentUser) {
+        UUID userId = currentUser.getId(); // jamais l'identifiant envoyé par le navigateur
         return ResponseEntity.status(HttpStatus.CREATED).body(
                 missionService.soumettreDemandesMission(request, userId));
     }
@@ -65,8 +66,9 @@ public class MissionController {
     @PreAuthorize("hasAuthority('ROLE_RAF') or hasAuthority('ROLE_ADMIN')")
     public ResponseEntity<MissionResponse> validerMission(
             @PathVariable UUID id,
-            @RequestBody Map<String, String> body) {
-        UUID userId = body.get("userId") != null ? UUID.fromString(body.get("userId")) : null;
+            @RequestBody Map<String, String> body,
+            @AuthenticationPrincipal User currentUser) {
+        UUID userId = currentUser.getId(); // jamais l'identifiant envoyé par le navigateur
         return ResponseEntity.ok(missionService.validerMission(id, userId));
     }
 
@@ -74,9 +76,10 @@ public class MissionController {
     @PreAuthorize("hasAuthority('ROLE_RAF') or hasAuthority('ROLE_ADMIN')")
     public ResponseEntity<MissionResponse> rejeterMission(
             @PathVariable UUID id,
-            @RequestBody Map<String, String> body) {
+            @RequestBody Map<String, String> body,
+            @AuthenticationPrincipal User currentUser) {
         String motif = body.get("motif");
-        UUID userId = body.get("userId") != null ? UUID.fromString(body.get("userId")) : null;
+        UUID userId = currentUser.getId(); // jamais l'identifiant envoyé par le navigateur
         return ResponseEntity.ok(missionService.rejeterMission(id, motif, userId));
     }
 }

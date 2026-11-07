@@ -15,6 +15,7 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import ong.fodde.modules.auth.entity.StatutUser;
 import ong.fodde.modules.auth.entity.User;
 import ong.fodde.modules.auth.repository.UserRepository;
 
@@ -50,7 +51,8 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             if (email != null && SecurityContextHolder.getContext().getAuthentication() == null) {
                 User user = userRepository.findByEmail(email).orElse(null);
 
-                if (user != null && jwtService.isTokenValid(jwt, user)) {
+                // Un compte suspendu ou désactivé perd l'accès immédiatement, même avec un jeton encore valide.
+                if (user != null && user.getStatut() == StatutUser.ACTIF && jwtService.isTokenValid(jwt, user)) {
                     List<SimpleGrantedAuthority> authorities = user.getRoles().stream()
                             .map(role -> new SimpleGrantedAuthority(role.getNom()))
                             .toList();

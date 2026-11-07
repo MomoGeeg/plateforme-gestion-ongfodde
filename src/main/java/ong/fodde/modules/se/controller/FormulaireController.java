@@ -7,6 +7,7 @@ import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -17,6 +18,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import jakarta.validation.Valid;
+import ong.fodde.modules.auth.entity.User;
 import ong.fodde.modules.se.dto.DonneeCollecteeRequest;
 import ong.fodde.modules.se.dto.DonneeCollecteeResponse;
 import ong.fodde.modules.se.dto.FormulaireRequest;
@@ -81,7 +83,8 @@ public class FormulaireController {
     public ResponseEntity<DonneeCollecteeResponse> soumettreReponse(
             @PathVariable UUID id,
             @Valid @RequestBody DonneeCollecteeRequest request,
-            @RequestParam UUID collecteurId) {
+            @AuthenticationPrincipal User currentUser) {
+        UUID collecteurId = currentUser.getId(); // jamais l'identifiant envoyé par le navigateur
         DonneeCollecteeRequest requestAvecFormulaire = new DonneeCollecteeRequest(
             id, request.dateCollecte(), request.localisation(), request.donnees()
         );
@@ -93,8 +96,9 @@ public class FormulaireController {
     @PreAuthorize("hasAuthority('ROLE_SE') or hasAuthority('ROLE_ADMIN')")
     public ResponseEntity<DonneeCollecteeResponse> validerReponse(
             @PathVariable UUID id,
-            @RequestBody Map<String, UUID> body) {
-        UUID validateurId = body.get("validateurId");
+            @RequestBody Map<String, UUID> body,
+            @AuthenticationPrincipal User currentUser) {
+        UUID validateurId = currentUser.getId(); // jamais l'identifiant envoyé par le navigateur
         return ResponseEntity.ok(formulaireService.validerReponse(id, validateurId));
     }
 }

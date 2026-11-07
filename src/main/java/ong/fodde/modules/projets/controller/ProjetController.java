@@ -8,6 +8,7 @@ import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -20,6 +21,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import jakarta.validation.Valid;
+import ong.fodde.modules.auth.entity.User;
 import ong.fodde.modules.projets.dto.ProjetRequest;
 import ong.fodde.modules.projets.dto.ProjetResponse;
 import ong.fodde.modules.projets.entity.StatutProjet;
@@ -64,9 +66,10 @@ public class ProjetController {
     @PreAuthorize("hasAuthority('ROLE_SE') or hasAuthority('ROLE_RESPONSABLE_PROGRAMMES') or hasAuthority('ROLE_ADMIN')")
     public ResponseEntity<ProjetResponse> changerStatut(
             @PathVariable UUID id,
-            @RequestBody Map<String, String> body) {
+            @RequestBody Map<String, String> body,
+            @AuthenticationPrincipal User currentUser) {
         StatutProjet nouveauStatut = StatutProjet.valueOf(body.get("statut"));
-        UUID validateurId = body.get("validateurId") != null ? UUID.fromString(body.get("validateurId")) : null;
+        UUID validateurId = currentUser.getId(); // jamais l'identifiant envoyé par le navigateur
         String commentaire = body.get("commentaire");
         return ResponseEntity.ok(projetService.changerStatut(id, nouveauStatut, validateurId, commentaire));
     }
@@ -82,9 +85,8 @@ public class ProjetController {
 
     @GetMapping("/mes-projets")
     @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<List<ProjetResponse>> listerMesProjets(
-            @RequestBody Map<String, UUID> body) {
-        return ResponseEntity.ok(projetService.listerMesProjets(body.get("userId")));
+    public ResponseEntity<List<ProjetResponse>> listerMesProjets(@AuthenticationPrincipal User currentUser) {
+        return ResponseEntity.ok(projetService.listerMesProjets(currentUser.getId()));
     }
         // Retirer un membre de l'équipe
     @DeleteMapping("/{projetId}/equipe/{userId}")
