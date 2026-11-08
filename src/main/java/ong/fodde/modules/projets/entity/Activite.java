@@ -24,6 +24,10 @@ public class Activite extends BaseEntity {
     @Column(name = "projet_id", nullable = false, columnDefinition = "uuid")
     private UUID projetId;
 
+    /** Résultat attendu auquel l'activité contribue (cadre logique). */
+    @Column(name = "resultat_id", columnDefinition = "uuid")
+    private UUID resultatId;
+
     @Column(name = "parent_id", columnDefinition = "uuid")
     private UUID parentId;
 

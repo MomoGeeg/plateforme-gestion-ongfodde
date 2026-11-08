@@ -13,6 +13,9 @@ public record ActiviteRequest(
 
     UUID parentId,
 
+    /** Résultat attendu auquel l'activité contribue (cadre logique). */
+    UUID resultatId,
+
     @NotBlank(message = "Le titre de l'activité est obligatoire")
     String titre,
 

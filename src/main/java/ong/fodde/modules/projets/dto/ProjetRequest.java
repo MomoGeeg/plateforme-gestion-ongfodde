@@ -1,6 +1,5 @@
 package ong.fodde.modules.projets.dto;
 
-import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
@@ -9,8 +8,11 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import ong.fodde.modules.projets.entity.Devise;
 
+/**
+ * Fiche d'un projet. Le budget total n'est plus saisi : c'est la somme du budget prévisionnel.
+ */
 public record ProjetRequest(
-    @NotBlank(message = "Le code du projet est obligatoire")
+    /** Facultatif : attribué automatiquement (PROJ-AAAA-NNN) s'il est vide. */
     String code,
 
     @NotBlank(message = "Le titre du projet est obligatoire")
@@ -28,14 +30,14 @@ public record ProjetRequest(
     @NotNull(message = "La date de fin est obligatoire")
     LocalDate dateFin,
 
-    @NotNull(message = "Le budget total est obligatoire")
-    BigDecimal budgetTotal,
-
     Devise devise,
 
-    @NotNull(message = "Le responsable est obligatoire")
+    /** Responsable du projet (compte) ; par défaut, la personne qui crée le projet. */
     UUID responsableId,
 
-    // Membres de l'équipe projet — optionnel à la création, modifiable après
+    /** Chef de projet (compte, en général un chargé de programme). */
+    UUID chefProjetId,
+
+    /** Membres de l'équipe (comptes) — facultatif à la création. */
     List<UUID> equipeIds
 ) {}

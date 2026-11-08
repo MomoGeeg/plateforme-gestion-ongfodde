@@ -35,5 +35,8 @@ public record IndicateurRequest(
 
     String sourceVerification,
 
-    UUID responsableId
+    UUID responsableId,
+
+    /** Résultat attendu mesuré (facultatif), du même projet. */
+    UUID resultatId
 ) {}

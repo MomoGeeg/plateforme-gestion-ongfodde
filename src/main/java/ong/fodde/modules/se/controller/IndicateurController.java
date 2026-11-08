@@ -32,7 +32,8 @@ public class IndicateurController {
     }
 
     @PostMapping
-    @PreAuthorize("hasAuthority('ROLE_RESPONSABLE_SE') or hasAuthority('ROLE_SE') or hasAuthority('ROLE_ADMIN')")
+    /** Suivi-évaluation, et au montage le RP et le chargé de programme. */
+    @PreAuthorize("hasAuthority('ROLE_RESPONSABLE_SE') or hasAuthority('ROLE_SE') or hasAuthority('ROLE_ADMIN') or hasAuthority('ROLE_RESPONSABLE_PROGRAMMES') or hasAuthority('ROLE_CHARGE_PROGRAMME')")
     public ResponseEntity<IndicateurResponse> creerIndicateur(@Valid @RequestBody IndicateurRequest request) {
         IndicateurResponse response = indicateurService.creerIndicateur(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);

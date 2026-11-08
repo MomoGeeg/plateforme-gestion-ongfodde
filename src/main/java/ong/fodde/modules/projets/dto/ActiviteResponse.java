@@ -21,6 +21,8 @@ public record ActiviteResponse(
         BigDecimal budgetAlloue,
         StatutActivite statut,
         Integer tauxAvancement,
-        LocalDateTime createdAt
+        LocalDateTime createdAt,
+        UUID resultatId,
+        String responsableNom
 ) {
 }

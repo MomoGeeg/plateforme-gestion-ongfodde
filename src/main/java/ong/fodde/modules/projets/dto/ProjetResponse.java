@@ -21,5 +21,9 @@ public record ProjetResponse(
     Devise devise,
     StatutProjet statut,
     UUID responsableId,
-    LocalDateTime createdAt
+    LocalDateTime createdAt,
+    String responsableNom,
+    UUID chefProjetId,
+    String chefProjetNom,
+    String motifRenvoi
 ) {}

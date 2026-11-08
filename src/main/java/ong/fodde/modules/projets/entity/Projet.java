@@ -63,6 +63,14 @@ public class Projet extends BaseEntity {
     @Column(name = "responsable_id", nullable = false, columnDefinition = "uuid")
     private UUID responsableId;
 
+    /** Chef de projet (en général un chargé de programme) : complète le cadre logique. */
+    @Column(name = "chef_projet_id", columnDefinition = "uuid")
+    private UUID chefProjetId;
+
+    /** Dernier motif de renvoi en brouillon (RAF ou SE). */
+    @Column(name = "motif_renvoi", columnDefinition = "text")
+    private String motifRenvoi;
+
     @ManyToMany(fetch = FetchType.LAZY)
     @JoinTable(
         name = "projet_bailleurs",
