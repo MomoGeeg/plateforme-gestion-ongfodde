@@ -10,6 +10,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import ong.fodde.modules.projets.entity.Projet;
 import ong.fodde.modules.projets.repository.ProjetRepository;
+import ong.fodde.modules.projets.repository.ResultatAttenduRepository;
 import ong.fodde.modules.se.dto.IndicateurRequest;
 import ong.fodde.modules.se.dto.IndicateurResponse;
 import ong.fodde.modules.se.entity.Indicateur;
@@ -27,9 +28,13 @@ public class IndicateurService {
     private final IndicateurRepository indicateurRepository;
     private final ProjetRepository projetRepository;
 
-    public IndicateurService(IndicateurRepository indicateurRepository, ProjetRepository projetRepository) {
+    private final ResultatAttenduRepository resultatRepository;
+
+    public IndicateurService(IndicateurRepository indicateurRepository, ProjetRepository projetRepository,
+                             ResultatAttenduRepository resultatRepository) {
         this.indicateurRepository = indicateurRepository;
         this.projetRepository = projetRepository;
+        this.resultatRepository = resultatRepository;
     }
 
     public IndicateurResponse creerIndicateur(IndicateurRequest request) {
@@ -38,6 +43,11 @@ public class IndicateurService {
             : request.code().trim();
         if (indicateurRepository.existsByCode(code)) {
             throw new BusinessException("Un indicateur avec le code '" + code + "' existe déjà");
+        }
+
+        if (request.resultatId() != null && resultatRepository.findById(request.resultatId())
+                .filter(r -> r.getProjetId().equals(request.projetId())).isEmpty()) {
+            throw new BusinessException("Ce résultat n'appartient pas au projet");
         }
 
         Indicateur indicateur = new Indicateur();
@@ -53,6 +63,7 @@ public class IndicateurService {
         indicateur.setFrequenceCollecte(request.frequenceCollecte());
         indicateur.setSourceVerification(request.sourceVerification());
         indicateur.setResponsableId(request.responsableId());
+        indicateur.setResultatId(request.resultatId());
 
         Indicateur saved = indicateurRepository.save(indicateur);
         return toResponse(saved);
@@ -137,7 +148,8 @@ public class IndicateurService {
             ind.getSourceVerification(),
             ind.getResponsableId(),
             ind.getCreatedAt(),
-            tauxRealisation
+            tauxRealisation,
+            ind.getResultatId()
         );
     }
 }

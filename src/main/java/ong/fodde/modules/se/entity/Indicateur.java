@@ -57,4 +57,8 @@ public class Indicateur extends BaseEntity {
 
     @Column(name = "responsable_id", columnDefinition = "uuid")
     private UUID responsableId;
+
+    /** Résultat attendu du cadre logique que l'indicateur mesure (facultatif). */
+    @Column(name = "resultat_id", columnDefinition = "uuid")
+    private UUID resultatId;
 }

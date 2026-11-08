@@ -5,5 +5,6 @@ public enum TypeDemande {
     DEPENSE,
     MISSION,
     ACQUISITION,
-    CONGE
+    CONGE,
+    PROJET
 }

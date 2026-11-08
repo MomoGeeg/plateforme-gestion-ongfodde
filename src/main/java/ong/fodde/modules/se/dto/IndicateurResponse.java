@@ -22,5 +22,6 @@ public record IndicateurResponse(
     String sourceVerification,
     UUID responsableId,
     LocalDateTime createdAt,
-    Double tauxRealisation
+    Double tauxRealisation,
+    UUID resultatId
 ) {}

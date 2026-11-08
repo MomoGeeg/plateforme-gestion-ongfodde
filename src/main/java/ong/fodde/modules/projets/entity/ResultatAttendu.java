@@ -28,6 +28,10 @@ public class ResultatAttendu {
     @Column(name = "projet_id", nullable = false, columnDefinition = "uuid")
     private UUID projetId;
 
+    /** Objectif spécifique auquel le résultat contribue (facultatif). */
+    @Column(name = "objectif_id", columnDefinition = "uuid")
+    private UUID objectifId;
+
     @Column(name = "libelle", nullable = false, columnDefinition = "text")
     private String libelle;
 

@@ -7,7 +7,11 @@ import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import ong.fodde.modules.auth.entity.User;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -32,11 +36,26 @@ public class ActiviteController {
         this.activiteService = activiteService;
     }
 
+    /** RP, chef de projet ou admin (vérifié par le service). */
     @PostMapping
-    @PreAuthorize("hasAuthority('ROLE_RESPONSABLE_PROGRAMMES') or hasAuthority('ROLE_ADMIN')")
-    public ResponseEntity<ActiviteResponse> creerActivite(@Valid @RequestBody ActiviteRequest request) {
-        ActiviteResponse response = activiteService.creerActivite(request);
-        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<ActiviteResponse> creerActivite(@Valid @RequestBody ActiviteRequest request,
+                                                          @AuthenticationPrincipal User user) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(activiteService.creerActivite(request, user));
+    }
+
+    @PutMapping("/{id}")
+    @PreAuthorize("isAuthenticated()")
+    public ActiviteResponse modifierActivite(@PathVariable UUID id, @Valid @RequestBody ActiviteRequest request,
+                                             @AuthenticationPrincipal User user) {
+        return activiteService.modifierActivite(id, request, user);
+    }
+
+    @DeleteMapping("/{id}")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<Void> supprimerActivite(@PathVariable UUID id, @AuthenticationPrincipal User user) {
+        activiteService.supprimerActivite(id, user);
+        return ResponseEntity.noContent().build();
     }
 
     @GetMapping("/projet/{projetId}")
