@@ -3,6 +3,8 @@ package ong.fodde.modules.rh.dto;
 import java.time.LocalDate;
 import java.util.UUID;
 
+import ong.fodde.modules.rh.entity.Pole;
+
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
@@ -32,6 +34,9 @@ public record EmployeRequest(
         @NotNull(message = "La date d'embauche est obligatoire")
         LocalDate dateEmbauche,
 
-        UUID superviseurId
+        Pole pole,
+
+        /** Supérieur direct (N+1) : identifiant d'une autre fiche employé. */
+        UUID superieurId
 ) {
 }

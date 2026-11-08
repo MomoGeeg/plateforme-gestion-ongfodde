@@ -61,11 +61,70 @@ public class EmployeService {
         employe.setPoste(request.poste());
         employe.setDepartement(request.departement());
         employe.setDateEmbauche(request.dateEmbauche());
-        employe.setSuperviseurId(request.superviseurId());
+        verifierSuperieur(null, request.superieurId());
+        employe.setPole(request.pole());
+        employe.setSuperieurId(request.superieurId());
         employe.setStatut(StatutEmploye.ACTIF);
 
         Employe saved = employeRepository.save(employe);
         return toResponse(saved);
+    }
+
+    /**
+     * Modifie la fiche : identité, poste, pôle et supérieur direct. Le matricule ne change pas ;
+     * le lien avec le compte se gère par l'administrateur (associer / dissocier) ; le contrat et
+     * le statut ont leurs propres routes.
+     */
+    public EmployeResponse modifierEmploye(UUID id, EmployeRequest request) {
+        Employe employe = employeRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Employé non trouvé avec l'id : " + id));
+        verifierSuperieur(id, request.superieurId());
+        employe.setNom(request.nom());
+        employe.setPrenom(request.prenom());
+        employe.setDateNaissance(request.dateNaissance());
+        employe.setLieuNaissance(request.lieuNaissance());
+        employe.setNationalite(request.nationalite());
+        employe.setTelephone(request.telephone());
+        employe.setAdresse(request.adresse());
+        employe.setPoste(request.poste());
+        employe.setDepartement(request.departement());
+        if (request.dateEmbauche() != null) {
+            employe.setDateEmbauche(request.dateEmbauche());
+        }
+        employe.setPole(request.pole());
+        employe.setSuperieurId(request.superieurId());
+        return toResponse(employeRepository.save(employe));
+    }
+
+    /**
+     * Le supérieur direct doit être une autre fiche, active, et la hiérarchie ne doit pas
+     * tourner en rond (A dépend de B qui dépend de A).
+     */
+    void verifierSuperieur(UUID employeId, UUID superieurId) {
+        if (superieurId == null) {
+            return;
+        }
+        if (superieurId.equals(employeId)) {
+            throw new BusinessException("Une personne ne peut pas être son propre supérieur");
+        }
+        Employe sup = employeRepository.findById(superieurId)
+                .orElseThrow(() -> new ResourceNotFoundException("Supérieur introuvable : " + superieurId));
+        if (sup.getStatut() == StatutEmploye.PARTI) {
+            throw new BusinessException(sup.getPrenom() + " " + sup.getNom()
+                    + " a quitté l'ONG : choisissez un autre supérieur");
+        }
+        if (employeId == null) {
+            return; // nouvelle fiche : personne ne dépend encore d'elle
+        }
+        Set<UUID> vus = new java.util.HashSet<>();
+        UUID courant = sup.getSuperieurId();
+        while (courant != null && vus.add(courant)) {
+            if (courant.equals(employeId)) {
+                throw new BusinessException(sup.getPrenom() + " " + sup.getNom()
+                        + " dépend déjà de cette personne : il ne peut pas être son supérieur");
+            }
+            courant = employeRepository.findById(courant).map(Employe::getSuperieurId).orElse(null);
+        }
     }
 
     @Transactional(readOnly = true)
@@ -194,7 +253,10 @@ public class EmployeService {
                 e.getDepartement(),
                 e.getDateEmbauche(),
                 e.getStatut(),
-                e.getSuperviseurId(),
+                e.getPole(),
+                e.getSuperieurId(),
+                e.getSuperieurId() == null ? null : employeRepository.findById(e.getSuperieurId())
+                        .map(sup -> sup.getPrenom() + " " + sup.getNom()).orElse(null),
                 e.getCreatedAt(),
                 contratActif != null ? contratActif.getTypeContrat() : null,
                 contratActif != null ? contratActif.getDateFin() : null,

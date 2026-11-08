@@ -60,8 +60,13 @@ public class Employe extends BaseEntity {
     @Column(name = "statut", nullable = false, columnDefinition = "statut_employe")
     private StatutEmploye statut = StatutEmploye.ACTIF;
 
-    @Column(name = "superviseur_id", columnDefinition = "uuid")
-    private UUID superviseurId;
+    @Enumerated(EnumType.STRING)
+    @Column(name = "pole", length = 20)
+    private Pole pole;
+
+    /** Supérieur direct (N+1) : une autre fiche employé. */
+    @Column(name = "superieur_id", columnDefinition = "uuid")
+    private UUID superieurId;
 
     @Column(name = "solde_conges")
     private Integer soldeConges = 30;
