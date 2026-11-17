@@ -87,6 +87,24 @@ public class JournalConnexions {
         return lignes.stream().map(c -> ConnexionResponse.de(c, dureeJetonMs, maintenant)).toList();
     }
 
+    /**
+     * Vide l'historique : les lignes de plus de {@code jours} jours, ou tout l'historique si
+     * {@code jours} vaut 0. Les sessions en cours supprimées ne recevront pas d'heure de déconnexion.
+     * @return le nombre de lignes supprimées
+     */
+    @Transactional
+    public int supprimer(int jours, UUID adminId) {
+        if (jours < 0) {
+            throw new IllegalArgumentException("Nombre de jours négatif");
+        }
+        LocalDateTime limite = jours == 0
+                ? LocalDateTime.now().plusMinutes(1)
+                : LocalDateTime.now().minusDays(jours);
+        int n = repository.supprimerAvant(limite);
+        log.info("Historique des connexions : {} ligne(s) supprimée(s) (plus de {} jours) par {}", n, jours, adminId);
+        return n;
+    }
+
     static String tronquer(String s, int max) {
         if (s == null) return null;
         return s.length() <= max ? s : s.substring(0, max);
