@@ -6,6 +6,7 @@ import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import java.util.Map;
 
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -21,6 +22,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import jakarta.validation.Valid;
 import ong.fodde.modules.auth.dto.CreateUserRequest;
+import ong.fodde.modules.auth.entity.User;
 import ong.fodde.modules.auth.dto.UpdateUserRequest;
 import ong.fodde.modules.auth.dto.UserListResponse;
 import ong.fodde.modules.auth.entity.StatutUser;
@@ -76,8 +78,9 @@ public class UserController {
 
     @DeleteMapping("/{id}")
     @PreAuthorize("hasAuthority('ROLE_ADMIN')")
-    public ResponseEntity<Void> supprimerUtilisateur(@PathVariable UUID id) {
-        userService.supprimerUtilisateur(id);
+    public ResponseEntity<Void> supprimerUtilisateur(@PathVariable UUID id,
+                                                     @AuthenticationPrincipal User currentUser) {
+        userService.supprimerUtilisateur(id, currentUser.getId());
         return ResponseEntity.noContent().build();
     }
 

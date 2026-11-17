@@ -27,13 +27,16 @@ public class UserService {
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
     private final PasswordEncoder passwordEncoder;
+    private final LiensUtilisateur liensUtilisateur;
 
     public UserService(UserRepository userRepository,
                        RoleRepository roleRepository,
-                       PasswordEncoder passwordEncoder) {
+                       PasswordEncoder passwordEncoder,
+                       LiensUtilisateur liensUtilisateur) {
         this.userRepository = userRepository;
         this.roleRepository = roleRepository;
         this.passwordEncoder = passwordEncoder;
+        this.liensUtilisateur = liensUtilisateur;
     }
 
     @Transactional(readOnly = true)
@@ -121,11 +124,39 @@ public class UserService {
         return toResponse(userRepository.save(user));
     }
 
-    public void supprimerUtilisateur(UUID id) {
-        if (!userRepository.existsById(id)) {
-            throw new ResourceNotFoundException("Utilisateur introuvable : " + id);
+    /**
+     * Suppression définitive d'un compte, refusée :
+     * - pour son propre compte ;
+     * - pour le dernier administrateur actif (plus personne ne pourrait gérer les comptes) ;
+     * - tant que le compte a des données rattachées (dépenses, projets, missions…) : on le
+     *   désactive alors, il ne peut plus se connecter et l'historique garde son auteur.
+     */
+    public void supprimerUtilisateur(UUID id, UUID demandeurId) {
+        User user = userRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Utilisateur introuvable : " + id));
+        String nom = user.getPrenom() + " " + user.getNom();
+
+        if (id.equals(demandeurId)) {
+            throw new BusinessException("Vous ne pouvez pas supprimer votre propre compte.");
         }
-        userRepository.deleteById(id);
+        boolean estAdmin = user.getRoles().stream().anyMatch(r -> "ROLE_ADMIN".equals(r.getNom()));
+        if (estAdmin && user.getStatut() == StatutUser.ACTIF) {
+            long adminsActifs = userRepository.findAll().stream()
+                    .filter(u -> u.getStatut() == StatutUser.ACTIF)
+                    .filter(u -> u.getRoles().stream().anyMatch(r -> "ROLE_ADMIN".equals(r.getNom())))
+                    .count();
+            if (adminsActifs <= 1) {
+                throw new BusinessException("Impossible de supprimer " + nom
+                        + " : c'est le dernier administrateur actif. Créez d'abord un autre administrateur.");
+            }
+        }
+        List<String> liens = liensUtilisateur.lister(id);
+        if (!liens.isEmpty()) {
+            throw new BusinessException("Impossible de supprimer " + nom + " : ce compte est lié à "
+                    + String.join(", ", liens) + ". Désactivez-le plutôt : il ne pourra plus se connecter "
+                    + "et l'historique reste intact.");
+        }
+        userRepository.delete(user);
     }
 
     public UserListResponse reinitialiserMotDePasse(UUID id, String nouveauMotDePasse) {
