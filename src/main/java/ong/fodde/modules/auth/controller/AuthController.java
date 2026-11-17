@@ -7,6 +7,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import ong.fodde.modules.auth.dto.InitAdminRequest;
 import ong.fodde.modules.auth.dto.LoginRequest;
@@ -28,9 +29,19 @@ public class AuthController {
     }
 
     @PostMapping("/login")
-    public ResponseEntity<LoginResponse> login(@Valid @RequestBody LoginRequest request) {
-        LoginResponse response = authService.login(request);
+    public ResponseEntity<LoginResponse> login(@Valid @RequestBody LoginRequest request,
+                                               HttpServletRequest http) {
+        LoginResponse response = authService.login(request, adresseIp(http), http.getHeader("User-Agent"));
         return ResponseEntity.ok(response);
+    }
+
+    /** Render place l'adresse du visiteur en tête de X-Forwarded-For. */
+    static String adresseIp(HttpServletRequest http) {
+        String transmise = http.getHeader("X-Forwarded-For");
+        if (transmise != null && !transmise.isBlank()) {
+            return transmise.split(",")[0].trim();
+        }
+        return http.getRemoteAddr();
     }
 
     @PostMapping("/init")
