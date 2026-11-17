@@ -10,9 +10,16 @@ public record LoginResponse(
     String email,
     String nom,
     String prenom,
-    List<String> roles
+    List<String> roles,
+    /** Ligne de l'historique des connexions, à renvoyer à la déconnexion (peut être vide). */
+    UUID connexionId
 ) {
     public LoginResponse(String token, UUID userId, String email, String nom, String prenom, List<String> roles) {
-        this(token, "Bearer", userId, email, nom, prenom, roles);
+        this(token, "Bearer", userId, email, nom, prenom, roles, null);
+    }
+
+    public LoginResponse(String token, UUID userId, String email, String nom, String prenom, List<String> roles,
+                         UUID connexionId) {
+        this(token, "Bearer", userId, email, nom, prenom, roles, connexionId);
     }
 }

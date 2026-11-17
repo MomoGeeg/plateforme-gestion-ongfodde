@@ -4,6 +4,8 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
+import org.springframework.beans.factory.annotation.Value;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -27,18 +29,22 @@ public class JournalConnexions {
     public static final String COMPTE_INCONNU = "COMPTE_INCONNU";
 
     private final ConnexionRepository repository;
+    private final long dureeJetonMs;
 
-    public JournalConnexions(ConnexionRepository repository) {
+    public JournalConnexions(ConnexionRepository repository,
+                             @Value("${app.jwt.expiration:86400000}") long dureeJetonMs) {
         this.repository = repository;
+        this.dureeJetonMs = dureeJetonMs;
     }
 
     /**
      * Transaction séparée : un refus de connexion lève une exception qui annule la transaction
      * de la connexion ; la ligne du journal doit être gardée quand même.
      * Une panne du journal ne doit jamais empêcher quelqu'un de se connecter.
+     * @return l'identifiant de la ligne (renvoyé au navigateur pour la déconnexion), ou null
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void enregistrer(String email, User user, boolean succes, String motifEchec,
+    public UUID enregistrer(String email, User user, boolean succes, String motifEchec,
                             String adresseIp, String navigateur) {
         try {
             Connexion c = new Connexion();
@@ -52,10 +58,23 @@ public class JournalConnexions {
             c.setAdresseIp(tronquer(adresseIp, 64));
             c.setNavigateur(tronquer(navigateur, 300));
             c.setDateConnexion(LocalDateTime.now());
-            repository.save(c);
+            return repository.save(c).getId();
         } catch (RuntimeException e) {
             log.warn("Connexion non journalisée pour {} : {}", email, e.getMessage());
+            return null;
         }
+    }
+
+    /**
+     * Note l'heure de déconnexion. Sans effet si la ligne n'appartient pas à la personne
+     * connectée, si elle est déjà fermée, ou si l'identifiant est inconnu.
+     */
+    @Transactional
+    public void deconnecter(UUID connexionId, UUID userId) {
+        if (connexionId == null || userId == null) return;
+        repository.findById(connexionId)
+                .filter(c -> c.isSucces() && userId.equals(c.getUserId()) && c.getDateDeconnexion() == null)
+                .ifPresent(c -> c.setDateDeconnexion(LocalDateTime.now()));
     }
 
     @Transactional(readOnly = true)
@@ -64,7 +83,8 @@ public class JournalConnexions {
         List<Connexion> lignes = userId == null
                 ? repository.findTop1000ByDateConnexionGreaterThanEqualOrderByDateConnexionDesc(depuis)
                 : repository.findTop1000ByUserIdAndDateConnexionGreaterThanEqualOrderByDateConnexionDesc(userId, depuis);
-        return lignes.stream().map(ConnexionResponse::de).toList();
+        LocalDateTime maintenant = LocalDateTime.now();
+        return lignes.stream().map(c -> ConnexionResponse.de(c, dureeJetonMs, maintenant)).toList();
     }
 
     static String tronquer(String s, int max) {

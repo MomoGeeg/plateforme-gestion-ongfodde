@@ -52,4 +52,8 @@ public class Connexion {
 
     @Column(name = "date_connexion", nullable = false, updatable = false)
     private LocalDateTime dateConnexion;
+
+    /** Renseignée quand la personne clique sur « Se déconnecter » ; seule colonne modifiable. */
+    @Column(name = "date_deconnexion")
+    private LocalDateTime dateDeconnexion;
 }
