@@ -177,8 +177,8 @@ public class UserService {
     public UserListResponse deverrouiller(UUID id) {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Utilisateur introuvable : " + id));
+        // Remet seulement le compteur à zéro : un compte désactivé reste désactivé.
         user.setTentativesEchouees(0);
-        user.setStatut(StatutUser.ACTIF);
         return toResponse(userRepository.save(user));
     }
 
@@ -211,7 +211,8 @@ public class UserService {
                 user.getStatut(),
                 roles,
                 user.getDerniereConnexion(),
-                user.getCreatedAt()
+                user.getCreatedAt(),
+                user.getTentativesEchouees() != null && user.getTentativesEchouees() >= AuthService.TENTATIVES_MAX
         );
     }
 }

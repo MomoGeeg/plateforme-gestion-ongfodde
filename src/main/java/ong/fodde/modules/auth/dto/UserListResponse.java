@@ -16,5 +16,7 @@ public record UserListResponse(
     StatutUser statut,
     List<String> roles,
     LocalDateTime derniereConnexion,
-    LocalDateTime createdAt
+    LocalDateTime createdAt,
+    /** Trop de mots de passe incorrects : connexion refusée jusqu'au déblocage par l'admin. */
+    boolean verrouille
 ) {}
