@@ -24,6 +24,9 @@ public class AuthService {
 
     private static final Logger log = LoggerFactory.getLogger(AuthService.class);
 
+    /** Nombre de mots de passe incorrects successifs qui verrouillent le compte. */
+    public static final int TENTATIVES_MAX = 5;
+
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
@@ -37,8 +40,12 @@ public class AuthService {
         this.journal = journal;
     }
 
-    /** Connexion ; chaque tentative, réussie ou refusée, est inscrite au journal des connexions. */
-    @Transactional
+    /**
+     * Connexion ; chaque tentative, réussie ou refusée, est inscrite au journal des connexions.
+     * Les refus ne doivent pas annuler la transaction : sans cela, le compteur de mots de passe
+     * incorrects n'était jamais enregistré et le compte ne se verrouillait jamais.
+     */
+    @Transactional(noRollbackFor = { AuthentificationException.class, CompteVerrouilleException.class })
     public LoginResponse login(LoginRequest request, String adresseIp, String navigateur) {
         User user = userRepository.findByEmail(request.email()).orElse(null);
         if (user == null) {
@@ -47,7 +54,7 @@ public class AuthService {
         }
 
         // Vérifier si le compte est verrouillé
-        if (user.getTentativesEchouees() != null && user.getTentativesEchouees() >= 5) {
+        if (user.getTentativesEchouees() != null && user.getTentativesEchouees() >= TENTATIVES_MAX) {
             journaliser(request.email(), user, false, JournalConnexions.COMPTE_VERROUILLE, adresseIp, navigateur);
             throw new CompteVerrouilleException("Compte verrouillé suite à trop de tentatives échouées. Contactez un administrateur.");
         }

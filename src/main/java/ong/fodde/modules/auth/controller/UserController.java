@@ -91,6 +91,12 @@ public class UserController {
         return ResponseEntity.ok(userService.reinitialiserMotDePasse(id, body.get("motDePasse")));
     }
 
+    @PatchMapping("/{id}/deverrouiller")
+    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
+    public ResponseEntity<UserListResponse> deverrouiller(@PathVariable UUID id) {
+        return ResponseEntity.ok(userService.deverrouiller(id));
+    }
+
     @PatchMapping("/{id}/roles")
     @PreAuthorize("hasAuthority('ROLE_ADMIN')")
     public ResponseEntity<UserListResponse> mettreAJourRoles(@PathVariable UUID id,
