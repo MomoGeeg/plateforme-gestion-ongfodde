@@ -16,6 +16,7 @@ import ong.fodde.modules.auth.dto.ConnexionResponse;
 import ong.fodde.modules.auth.entity.Connexion;
 import ong.fodde.modules.auth.entity.User;
 import ong.fodde.modules.auth.repository.ConnexionRepository;
+import ong.fodde.shared.exception.ResourceNotFoundException;
 
 /** Journal des tentatives de connexion. */
 @Service
@@ -103,6 +104,16 @@ public class JournalConnexions {
         int n = repository.supprimerAvant(limite);
         log.info("Historique des connexions : {} ligne(s) supprimée(s) (plus de {} jours) par {}", n, jours, adminId);
         return n;
+    }
+
+    /** Supprime une connexion de l'historique. */
+    @Transactional
+    public void supprimerUne(UUID connexionId, UUID adminId) {
+        if (!repository.existsById(connexionId)) {
+            throw new ResourceNotFoundException("Connexion introuvable dans l'historique.");
+        }
+        repository.deleteById(connexionId);
+        log.info("Historique des connexions : ligne {} supprimée par {}", connexionId, adminId);
     }
 
     static String tronquer(String s, int max) {
