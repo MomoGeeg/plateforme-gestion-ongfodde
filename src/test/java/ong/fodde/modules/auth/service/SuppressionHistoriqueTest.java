@@ -44,6 +44,22 @@ class SuppressionHistoriqueTest {
     }
 
     @Test
+    void uneConnexionPreciseEstSupprimee() {
+        UUID id = UUID.randomUUID();
+        when(repo.existsById(id)).thenReturn(true);
+        journal.supprimerUne(id, UUID.randomUUID());
+        verify(repo).deleteById(id);
+    }
+
+    @Test
+    void uneConnexionInconnueEstSignalee() {
+        UUID id = UUID.randomUUID();
+        when(repo.existsById(id)).thenReturn(false);
+        assertThrows(ong.fodde.shared.exception.ResourceNotFoundException.class,
+                () -> journal.supprimerUne(id, UUID.randomUUID()));
+    }
+
+    @Test
     void nombreDeJoursNegatifRefuse() {
         assertThrows(IllegalArgumentException.class, () -> journal.supprimer(-1, UUID.randomUUID()));
     }

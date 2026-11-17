@@ -9,6 +9,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -35,6 +36,14 @@ public class ConnexionController {
             @RequestParam(required = false) UUID userId,
             @RequestParam(defaultValue = "30") int jours) {
         return ResponseEntity.ok(journal.lister(userId, jours));
+    }
+
+    /** Supprime une ligne de l'historique. */
+    @DeleteMapping("/{id}")
+    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
+    public ResponseEntity<Void> supprimerUne(@PathVariable UUID id, @AuthenticationPrincipal User currentUser) {
+        journal.supprimerUne(id, currentUser.getId());
+        return ResponseEntity.noContent().build();
     }
 
     /** Supprime les connexions de plus de {@code avantJours} jours ; 0 = tout l'historique. */
