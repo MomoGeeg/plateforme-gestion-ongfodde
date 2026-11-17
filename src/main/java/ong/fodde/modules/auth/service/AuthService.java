@@ -2,6 +2,7 @@ package ong.fodde.modules.auth.service;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.UUID;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -80,7 +81,7 @@ public class AuthService {
         user.setTentativesEchouees(0);
         user.setDerniereConnexion(LocalDateTime.now());
         userRepository.save(user);
-        journaliser(request.email(), user, true, null, adresseIp, navigateur);
+        UUID connexionId = journaliser(request.email(), user, true, null, adresseIp, navigateur);
 
         List<String> roles = user.getRoles().stream()
                 .map(Role::getNom)
@@ -93,16 +94,18 @@ public class AuthService {
                 user.getEmail(),
                 user.getNom(),
                 user.getPrenom(),
-                roles
+                roles,
+                connexionId
         );
     }
 
     /** Une panne du journal ne doit jamais bloquer ni changer le résultat d'une connexion. */
-    private void journaliser(String email, User user, boolean succes, String motif, String ip, String navigateur) {
+    private UUID journaliser(String email, User user, boolean succes, String motif, String ip, String navigateur) {
         try {
-            journal.enregistrer(email, user, succes, motif, ip, navigateur);
+            return journal.enregistrer(email, user, succes, motif, ip, navigateur);
         } catch (RuntimeException e) {
             log.warn("Journal des connexions indisponible : {}", e.getMessage());
+            return null;
         }
     }
 }
