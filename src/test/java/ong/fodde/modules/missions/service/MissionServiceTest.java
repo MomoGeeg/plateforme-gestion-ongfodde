@@ -63,7 +63,7 @@ class MissionServiceTest {
     private final DemandeCongeRepository conges = mock(DemandeCongeRepository.class);
     private final AvanceService avances = mock(AvanceService.class);
     private final MissionService service = new MissionService(missions, users, projets, employes, vehicules, conges,
-            avances, mock(HistoriqueService.class), new AccesPersonnel(employes), new BigDecimal("500000"));
+            avances, mock(HistoriqueService.class), new AccesPersonnel(employes), new BigDecimal("5000000"));
 
     private final List<Employe> toutesFiches = new ArrayList<>();
     private final List<Mission> autresMissions = new ArrayList<>();
@@ -144,11 +144,20 @@ class MissionServiceTest {
                 java.util.Arrays.stream(equipe).map(Employe::getId).toList(), null, vehicule, null);
     }
 
-    /** Mission arrivée chez le RAF (sans supérieur, sans besoin logistique). */
+    /** Mission sans besoin logistique : elle part directement chez le RAF. */
     private MissionResponse chezLeRaf(User demandeur, Employe agent) {
         MissionResponse m = service.creer(demande(false, agent), demandeur);
-        assertEquals(StatutMission.ORGANISEE, m.statut());
+        assertEquals(StatutMission.SOUMISE, m.statut());
         return m;
+    }
+
+    /** Mission avec véhicule, validée par le RAF (frais sous le seuil) : elle arrive à la logistique. */
+    private MissionResponse chezLaLogistique(User raf, Employe agent) {
+        MissionResponse m = service.creer(demande(true, agent), raf);
+        service.preparer(m.id(), budget(agent, "25000", false), raf);
+        MissionResponse v = service.validerRaf(m.id(), raf);
+        assertEquals(StatutMission.APPROUVEE_N1, v.statut());
+        return v;
     }
 
     private PreparationRequest budget(Employe agent, String prixUnitaire, boolean soumettreSe) {
@@ -157,27 +166,16 @@ class MissionServiceTest {
                         new BigDecimal(prixUnitaire))), soumettreSe);
     }
 
-    // ── Création : étapes sautées ─────────────────────────
+    // ── Création : tout part au RAF ───────────────────────
 
     @Test
-    void unChargeDeProgrammeAttendLAccordDuRp() {
+    void laDemandeVaAuRafMemeAvecUnSuperieurDirect() {
         User rp = compte("ROLE_RESPONSABLE_PROGRAMMES");
         Employe ficheRp = fiche("Responsable des programmes", rp, null);
         User cp = compte("ROLE_CHARGE_PROGRAMME");
         Employe ficheCp = fiche("Chargé de programme", cp, ficheRp);
         MissionResponse m = service.creer(demande(true, ficheCp), cp);
         assertEquals(StatutMission.SOUMISE, m.statut());
-        assertEquals(rp.getId(), m.n1Id());
-    }
-
-    @Test
-    void sousLeSeLAccordN1EstSauteEtLaLogistiqueSuit() {
-        User se = compte("ROLE_SE");
-        Employe ficheSe = fiche("Secrétaire exécutif", se, null);
-        User rp = compte("ROLE_RESPONSABLE_PROGRAMMES");
-        Employe ficheRp = fiche("Responsable des programmes", rp, ficheSe);
-        MissionResponse m = service.creer(demande(true, ficheRp), rp);
-        assertEquals(StatutMission.APPROUVEE_N1, m.statut());
         assertEquals(null, m.n1Id());
     }
 
@@ -209,30 +207,28 @@ class MissionServiceTest {
         assertTrue(ex.getMessage().contains("pas libre"));
     }
 
-    // ── Accord du supérieur ───────────────────────────────
+    // ── Rejets ────────────────────────────────────────────
 
     @Test
-    void seulLeSuperieurDirectDonneSonAccord() {
-        User rp = compte("ROLE_RESPONSABLE_PROGRAMMES");
-        Employe ficheRp = fiche("Responsable des programmes", rp, null);
+    void leRafRejetteAvecUnMotif() {
         User cp = compte("ROLE_CHARGE_PROGRAMME");
-        Employe ficheCp = fiche("Chargé de programme", cp, ficheRp);
+        Employe ficheCp = fiche("Chargé de programme", cp, null);
         MissionResponse m = service.creer(demande(false, ficheCp), cp);
-        User autre = compte("ROLE_RAF");
-        assertThrows(AccessDeniedException.class, () -> service.approuverN1(m.id(), autre));
-        assertEquals(StatutMission.ORGANISEE, service.approuverN1(m.id(), rp).statut());
+        assertThrows(AccessDeniedException.class, () -> service.rejeter(m.id(), "Non", compte("ROLE_SE")));
+        User raf = compte("ROLE_RAF");
+        assertThrows(BusinessException.class, () -> service.rejeter(m.id(), " ", raf));
+        assertEquals(StatutMission.REJETEE, service.rejeter(m.id(), "Pas prioritaire", raf).statut());
     }
 
     @Test
-    void leRafNeRejettePasALaPlaceDuSuperieur() {
-        User rp = compte("ROLE_RESPONSABLE_PROGRAMMES");
-        Employe ficheRp = fiche("Responsable des programmes", rp, null);
-        User cp = compte("ROLE_CHARGE_PROGRAMME");
-        Employe ficheCp = fiche("Chargé de programme", cp, ficheRp);
-        MissionResponse m = service.creer(demande(false, ficheCp), cp);
-        assertThrows(AccessDeniedException.class, () -> service.rejeter(m.id(), "Non", compte("ROLE_RAF")));
-        assertThrows(BusinessException.class, () -> service.rejeter(m.id(), " ", rp));
-        assertEquals(StatutMission.REJETEE, service.rejeter(m.id(), "Pas prioritaire", rp).statut());
+    void chezLeSeSeulLeSeRejette() {
+        User raf = compte("ROLE_RAF");
+        Employe agent = fiche("RAF", raf, null);
+        MissionResponse m = chezLeRaf(raf, agent);
+        service.preparer(m.id(), budget(agent, "1000", true), raf);
+        service.validerRaf(m.id(), raf);
+        assertThrows(AccessDeniedException.class, () -> service.rejeter(m.id(), "Non", raf));
+        assertEquals(StatutMission.REJETEE, service.rejeter(m.id(), "Trop coûteuse", compte("ROLE_SE")).statut());
     }
 
     // ── Logistique ────────────────────────────────────────
@@ -243,10 +239,10 @@ class MissionServiceTest {
         Employe agent = fiche("RAF", raf, null);
         Employe chauffeur = fiche("Chauffeur", null, null);
         Vehicule hilux = vehicule(EtatMateriel.BON_ETAT);
-        MissionResponse m = service.creer(demande(true, agent), raf);
+        MissionResponse m = chezLaLogistique(raf, agent);
         MissionResponse o = service.organiser(m.id(),
                 new OrganisationRequest(hilux.getId(), chauffeur.getId(), "Glacière remise"), compte("ROLE_RESPONSABLE_LOGISTIQUE"));
-        assertEquals(StatutMission.ORGANISEE, o.statut());
+        assertEquals(StatutMission.VALIDEE, o.statut(), "frais : la comptabilité débloque les fonds");
         assertEquals(chauffeur.getId(), o.chauffeurId());
     }
 
@@ -261,7 +257,7 @@ class MissionServiceTest {
         autre.setId(UUID.randomUUID());
         autre.setVehiculeId(pris.getId());
         autresMissions.add(autre);
-        MissionResponse m = service.creer(demande(true, agent), raf);
+        MissionResponse m = chezLaLogistique(raf, agent);
         User log = compte("ROLE_RESPONSABLE_LOGISTIQUE");
         assertThrows(BusinessException.class, () -> service.organiser(m.id(),
                 new OrganisationRequest(enReparation.getId(), chauffeur.getId(), null), log));
@@ -275,7 +271,7 @@ class MissionServiceTest {
         Employe agent = fiche("RAF", raf, null);
         Employe comptable = fiche("Comptable", null, null);
         Vehicule hilux = vehicule(EtatMateriel.BON_ETAT);
-        MissionResponse m = service.creer(demande(true, agent), raf);
+        MissionResponse m = chezLaLogistique(raf, agent);
         assertThrows(BusinessException.class, () -> service.organiser(m.id(),
                 new OrganisationRequest(hilux.getId(), comptable.getId(), null), compte("ROLE_RESPONSABLE_LOGISTIQUE")));
     }
@@ -284,7 +280,7 @@ class MissionServiceTest {
     void leVehiculeEstObligatoireSiLaMissionEnDemandeUn() {
         User raf = compte("ROLE_RAF");
         Employe agent = fiche("RAF", raf, null);
-        MissionResponse m = service.creer(demande(true, agent), raf);
+        MissionResponse m = chezLaLogistique(raf, agent);
         assertThrows(BusinessException.class, () -> service.organiser(m.id(),
                 new OrganisationRequest(null, null, null), compte("ROLE_RESPONSABLE_LOGISTIQUE")));
     }
@@ -315,9 +311,32 @@ class MissionServiceTest {
         User raf = compte("ROLE_RAF");
         Employe agent = fiche("RAF", raf, null);
         MissionResponse m = chezLeRaf(raf, agent);
-        service.preparer(m.id(), budget(agent, "125000", false), raf); // 4 × 125 000 = 500 000
+        service.preparer(m.id(), budget(agent, "1250000", false), raf); // 4 × 1 250 000 = 5 000 000
         assertEquals(StatutMission.EN_VALIDATION_SE, service.validerRaf(m.id(), raf).statut());
         assertEquals(StatutMission.VALIDEE, service.validerSe(m.id(), compte("ROLE_SE")).statut());
+    }
+
+    @Test
+    void sousLeNouveauSeuilLeSeNIntervientPas() {
+        User raf = compte("ROLE_RAF");
+        Employe agent = fiche("RAF", raf, null);
+        MissionResponse m = chezLeRaf(raf, agent);
+        service.preparer(m.id(), budget(agent, "1000000", false), raf); // 4 000 000
+        assertEquals(StatutMission.VALIDEE, service.validerRaf(m.id(), raf).statut());
+    }
+
+    @Test
+    void apresLeSeLaLogistiquePuisLaComptabilite() {
+        User raf = compte("ROLE_RAF");
+        Employe agent = fiche("RAF", raf, null);
+        Employe chauffeur = fiche("Chauffeur", null, null);
+        Vehicule hilux = vehicule(EtatMateriel.BON_ETAT);
+        MissionResponse m = service.creer(demande(true, agent), raf);
+        service.preparer(m.id(), budget(agent, "1250000", false), raf);
+        assertEquals(StatutMission.EN_VALIDATION_SE, service.validerRaf(m.id(), raf).statut());
+        assertEquals(StatutMission.APPROUVEE_N1, service.validerSe(m.id(), compte("ROLE_SE")).statut());
+        assertEquals(StatutMission.VALIDEE, service.organiser(m.id(),
+                new OrganisationRequest(hilux.getId(), chauffeur.getId(), null), compte("ROLE_RESPONSABLE_LOGISTIQUE")).statut());
     }
 
     @Test

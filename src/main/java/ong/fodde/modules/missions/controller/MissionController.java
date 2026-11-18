@@ -86,13 +86,6 @@ public class MissionController {
         return ResponseEntity.status(HttpStatus.CREATED).body(missionService.creer(request, user));
     }
 
-    /** Accord du supérieur direct (vérifié par le service). */
-    @PatchMapping("/{id}/approuver-n1")
-    @PreAuthorize("isAuthenticated()")
-    public MissionResponse approuverN1(@PathVariable UUID id, @AuthenticationPrincipal User user) {
-        return missionService.approuverN1(id, user);
-    }
-
     @PatchMapping("/{id}/organiser")
     @PreAuthorize("hasAuthority('ROLE_RESPONSABLE_LOGISTIQUE') or hasAuthority('ROLE_ADMIN')")
     public MissionResponse organiser(@PathVariable UUID id, @RequestBody OrganisationRequest request,

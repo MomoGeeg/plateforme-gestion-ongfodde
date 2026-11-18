@@ -60,11 +60,9 @@ import static ong.fodde.modules.missions.entity.StatutMission.*;
  * Missions, d'après l'organisation de l'ONG :
  * <ol>
  *   <li>le demandeur saisit l'ordre de mission (destination, dates, objet, équipe proposée, besoins) ;</li>
- *   <li>son supérieur direct donne son accord (sauté s'il n'en a pas, ou si c'est le SE, qui
- *       intervient plus loin si nécessaire) ;</li>
- *   <li>la logistique affecte véhicule et chauffeur libres (sauté sans besoin logistique) ;</li>
  *   <li>le RAF arrête l'équipe et le budget, puis valide ;</li>
- *   <li>le SE valide au-delà du seuil, ou si le RAF le demande ;</li>
+ *   <li>le SE valide au-delà du seuil (5 000 000 F CFA par défaut), ou si le RAF le demande ;</li>
+ *   <li>la logistique affecte véhicule et chauffeur libres (sauté sans besoin logistique) ;</li>
  *   <li>la comptabilité débloque les fonds : une avance au chef de mission (sauté sans frais) ;</li>
  *   <li>la mission est prête : ordre de mission imprimable et envoyé à l'équipe.</li>
  * </ol>
@@ -105,7 +103,7 @@ public class MissionService {
                           AvanceService avanceService,
                           HistoriqueService historiqueService,
                           AccesPersonnel accesPersonnel,
-                          @Value("${app.missions.seuil-se:500000}") BigDecimal seuilSe) {
+                          @Value("${app.missions.seuil-se:5000000}") BigDecimal seuilSe) {
         this.missionRepository = missionRepository;
         this.userRepository = userRepository;
         this.projetRepository = projetRepository;
@@ -233,9 +231,8 @@ public class MissionService {
         definirEquipe(m, req.participantIds(), req.chefMissionId(), null);
         m.setBudgetEstime(BigDecimal.ZERO);
 
-        // Supérieur direct : son accord est la première étape, sauf s'il n'y en a pas ou si c'est le SE.
-        m.setN1Id(superieurQuiApprouve(demandeur.getId()).orElse(null));
-        m.setStatut(m.getN1Id() != null ? SOUMISE : apresAccordN1(m));
+        // Toute mission part au RAF ; plus d'accord du supérieur direct.
+        m.setStatut(SOUMISE);
 
         Mission saved = missionRepository.save(m);
         historiqueService.enregistrer(TypeDemande.MISSION, saved.getId(), null, saved.getStatut(),
@@ -243,17 +240,7 @@ public class MissionService {
         return toResponse(saved);
     }
 
-    /** 2. Accord du supérieur direct. */
-    public MissionResponse approuverN1(UUID id, User user) {
-        Mission m = getOrThrow(id);
-        exigerStatut(m, SOUMISE);
-        if (!user.getId().equals(m.getN1Id()) && !accesPersonnel.aUnRole(user, "ROLE_ADMIN")) {
-            throw new AccessDeniedException("Seul le supérieur direct du demandeur donne cet accord");
-        }
-        return changer(m, apresAccordN1(m), user, null);
-    }
-
-    /** 3. La logistique affecte véhicule et chauffeur, libres sur la période. */
+    /** 4. Après les validations, la logistique affecte véhicule et chauffeur, libres sur la période. */
     public MissionResponse organiser(UUID id, OrganisationRequest req, User user) {
         Mission m = getOrThrow(id);
         exigerStatut(m, APPROUVEE_N1);
@@ -275,13 +262,13 @@ public class MissionService {
         m.setVehiculeId(req.vehiculeId());
         m.setChauffeurId(req.chauffeurId());
         m.setNotesLogistique(vide(req.notesLogistique()) ? null : req.notesLogistique().trim());
-        return changer(m, ORGANISEE, user, null);
+        return changer(m, apresLogistique(m), user, null);
     }
 
-    /** 4a. Le RAF arrête l'équipe et le budget (modifiable tant qu'il n'a pas validé). */
+    /** 2a. Le RAF arrête l'équipe et le budget (modifiable tant qu'il n'a pas validé). */
     public MissionResponse preparer(UUID id, PreparationRequest req, User user) {
         Mission m = getOrThrow(id);
-        exigerStatut(m, ORGANISEE);
+        exigerChezLeRaf(m);
         definirEquipe(m, req.participantIds(), req.chefMissionId(), m.getId());
         List<FraisMission> frais = new ArrayList<>();
         for (FraisRequest f : Optional.ofNullable(req.frais()).orElse(List.of())) {
@@ -302,24 +289,24 @@ public class MissionService {
         return toResponse(missionRepository.save(m));
     }
 
-    /** 4b. Validation du RAF : vers le SE si nécessaire, sinon vers la comptabilité. */
+    /** 2b. Validation du RAF : vers le SE si nécessaire, sinon vers la logistique ou la comptabilité. */
     public MissionResponse validerRaf(UUID id, User user) {
         Mission m = getOrThrow(id);
-        exigerStatut(m, ORGANISEE);
+        exigerChezLeRaf(m);
         if (m.getParticipantIds().isEmpty()) {
             throw new BusinessException("Ajoutez au moins une personne à l'équipe avant de valider");
         }
         return changer(m, validationSeRequise(m) ? EN_VALIDATION_SE : apresValidation(m), user, null);
     }
 
-    /** 5. Validation du Secrétaire exécutif. */
+    /** 3. Validation du Secrétaire exécutif. */
     public MissionResponse validerSe(UUID id, User user) {
         Mission m = getOrThrow(id);
         exigerStatut(m, EN_VALIDATION_SE);
         return changer(m, apresValidation(m), user, null);
     }
 
-    /** 6. La comptabilité débloque les fonds : une avance à justifier au retour. */
+    /** 5. La comptabilité débloque les fonds : une avance à justifier au retour. */
     public MissionResponse debloquerFonds(UUID id, User user) {
         Mission m = getOrThrow(id);
         exigerStatut(m, VALIDEE);
@@ -343,8 +330,7 @@ public class MissionService {
         }
         boolean admin = accesPersonnel.aUnRole(user, "ROLE_ADMIN");
         boolean autorise = switch (m.getStatut()) {
-            case SOUMISE -> user.getId().equals(m.getN1Id());
-            case APPROUVEE_N1, ORGANISEE -> accesPersonnel.aUnRole(user, "ROLE_RAF");
+            case SOUMISE, ORGANISEE, APPROUVEE_N1 -> accesPersonnel.aUnRole(user, "ROLE_RAF");
             case EN_VALIDATION_SE -> accesPersonnel.aUnRole(user, "ROLE_SE");
             default -> throw new BusinessException("Cette mission ne peut plus être rejetée");
         };
@@ -372,11 +358,13 @@ public class MissionService {
     // Règles
     // ═════════════════════════════════════════════════════════════════════
 
-    static StatutMission apresAccordN1(Mission m) {
-        return m.isBesoinVehicule() || !vide(m.getBesoinsMateriel()) ? APPROUVEE_N1 : ORGANISEE;
+    /** Après les validations : la logistique si un véhicule ou du matériel est demandé. */
+    static StatutMission apresValidation(Mission m) {
+        return m.isBesoinVehicule() || !vide(m.getBesoinsMateriel()) ? APPROUVEE_N1 : apresLogistique(m);
     }
 
-    static StatutMission apresValidation(Mission m) {
+    /** Après la logistique : la comptabilité s'il y a des frais, sinon la mission est prête. */
+    static StatutMission apresLogistique(Mission m) {
         return total(m).signum() > 0 ? VALIDEE : PRETE;
     }
 
@@ -386,19 +374,6 @@ public class MissionService {
 
     static BigDecimal total(Mission m) {
         return m.getFrais().stream().map(FraisMission::montant).reduce(BigDecimal.ZERO, BigDecimal::add);
-    }
-
-    /** Compte du supérieur direct qui doit donner son accord, s'il y a lieu. */
-    Optional<UUID> superieurQuiApprouve(UUID demandeurId) {
-        return employeRepository.findByUserId(demandeurId)
-                .map(Employe::getSuperieurId)
-                .flatMap(employeRepository::findById)
-                .filter(sup -> sup.getStatut() != StatutEmploye.PARTI)
-                .map(Employe::getUserId)
-                .filter(compte -> !compte.equals(demandeurId))
-                .filter(compte -> userRepository.findById(compte)
-                        .map(u -> !accesPersonnel.aUnRole(u, "ROLE_SE"))
-                        .orElse(false));
     }
 
     /** Équipe : fiches présentes, libres sur la période ; le chef en fait partie (le premier par défaut). */
@@ -435,6 +410,13 @@ public class MissionService {
         Mission saved = missionRepository.save(m);
         historiqueService.enregistrer(TypeDemande.MISSION, saved.getId(), avant, apres, user.getId(), motif);
         return toResponse(saved);
+    }
+
+    /** La mission est chez le RAF (ORGANISEE : ancienne étape, même rôle). */
+    private static void exigerChezLeRaf(Mission m) {
+        if (m.getStatut() != SOUMISE && m.getStatut() != ORGANISEE) {
+            throw new BusinessException("Action impossible à cette étape de la mission");
+        }
     }
 
     private static void exigerStatut(Mission m, StatutMission attendu) {
