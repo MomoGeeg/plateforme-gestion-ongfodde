@@ -20,6 +20,8 @@ public record DemandeCongeResponse(
         String justificatifUrl,
         String motifRejet,
         Integer nbJours,
-        LocalDateTime createdAt
+        LocalDateTime createdAt,
+        UUID valideParRh,
+        LocalDateTime dateValidationRh
 ) {
 }

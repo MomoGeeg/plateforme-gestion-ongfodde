@@ -43,6 +43,12 @@ public class DemandeConge extends BaseEntity {
     @Column(name = "statut", nullable = false, columnDefinition = "statut_conge")
     private StatutConge statut = StatutConge.EN_ATTENTE;
 
+    @Column(name = "valide_par_rh", columnDefinition = "uuid")
+    private UUID valideParRh;
+
+    @Column(name = "date_validation_rh")
+    private LocalDateTime dateValidationRh;
+
     @Column(name = "valide_par_raf", columnDefinition = "uuid")
     private UUID valideParRaf;
 
