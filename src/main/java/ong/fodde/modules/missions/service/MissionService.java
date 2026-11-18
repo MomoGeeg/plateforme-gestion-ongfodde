@@ -82,7 +82,7 @@ public class MissionService {
     /** Une mission rejetée ou annulée ne retient plus personne ni aucun véhicule. */
     static final Set<StatutMission> INACTIVES = Set.of(REJETEE, ANNULEE);
 
-    private static final Set<StatutConge> CONGES_RETENUS = Set.of(StatutConge.VALIDE_N1, StatutConge.APPROUVE);
+    private static final Set<StatutConge> CONGES_RETENUS = Set.of(StatutConge.VALIDE_N1, StatutConge.VALIDE_RH, StatutConge.APPROUVE);
     private static final DateTimeFormatter JJ_MM_AAAA = DateTimeFormatter.ofPattern("dd/MM/yyyy");
 
     private final MissionRepository missionRepository;

@@ -7,7 +7,7 @@ import jakarta.validation.constraints.NotNull;
 import ong.fodde.modules.rh.entity.TypeConge;
 
 public record DemandeCongeRequest(
-        @NotNull(message = "L'identifiant de l'employé est obligatoire")
+        /** Vide = la personne connectée demande pour elle-même ; rempli = les RH enregistrent pour un employé. */
         UUID employeId,
 
         @NotNull(message = "Le type de congé est obligatoire")

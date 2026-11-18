@@ -36,12 +36,13 @@ public class DemandeCongeController {
         this.accesPersonnel = accesPersonnel;
     }
 
+    /** Chacun demande ses congés ; les RH peuvent en enregistrer pour un employé. */
     @PostMapping
-    @PreAuthorize("hasAuthority('ROLE_RH') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<DemandeCongeResponse> soumettreDemande(@Valid @RequestBody DemandeCongeRequest request,
                                                                  @AuthenticationPrincipal User currentUser) {
         return ResponseEntity.status(HttpStatus.CREATED).body(
-                demandeCongeService.soumettreDemande(request, currentUser.getId()));
+                demandeCongeService.soumettreDemande(request, currentUser));
     }
 
     /** Historique des validations : réservé à l'employé concerné et aux rôles de gestion. */
@@ -62,20 +63,28 @@ public class DemandeCongeController {
         return ResponseEntity.ok(demandeCongeService.approuverRAF(id, validateurId));
     }
 
+    /** Les RH valident et transmettent au RAF. */
+    @PatchMapping("/{id}/valider-rh")
+    @PreAuthorize("hasAuthority('ROLE_RH') or hasAuthority('ROLE_ADMIN')")
+    public ResponseEntity<DemandeCongeResponse> validerRH(@PathVariable UUID id,
+                                                          @AuthenticationPrincipal User currentUser) {
+        return ResponseEntity.ok(demandeCongeService.validerRH(id, currentUser.getId()));
+    }
+
+    /** Rejet avec motif : les RH à leur étape, le RAF à la sienne (contrôlé dans le service). */
     @PatchMapping("/{id}/rejeter")
-    @PreAuthorize("hasAuthority('ROLE_RAF') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('ROLE_RH') or hasAuthority('ROLE_RAF') or hasAuthority('ROLE_ADMIN')")
     public ResponseEntity<DemandeCongeResponse> rejeter(@PathVariable UUID id,
                                                          @AuthenticationPrincipal User currentUser,
                                                          @RequestParam(required = false) String motif) {
-        UUID validateurId = currentUser.getId(); // jamais l'identifiant envoyé par le navigateur
-        return ResponseEntity.ok(demandeCongeService.rejeter(id, validateurId, motif));
+        return ResponseEntity.ok(demandeCongeService.rejeter(id, currentUser, motif));
     }
 
     @PatchMapping("/{id}/annuler")
     @PreAuthorize("isAuthenticated()")
     public ResponseEntity<DemandeCongeResponse> annuler(@PathVariable UUID id,
                                                          @AuthenticationPrincipal User currentUser) {
-        return ResponseEntity.ok(demandeCongeService.annuler(id, currentUser.getId()));
+        return ResponseEntity.ok(demandeCongeService.annuler(id, currentUser));
     }
 
     @GetMapping
