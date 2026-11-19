@@ -64,7 +64,8 @@ class MontageProjetTest {
 
     private final DroitsProjet droits = new DroitsProjet(new AccesPersonnel(mock(EmployeRepository.class)));
     private final ProjetMapper mapper = new ProjetMapper(users);
-    private final ActiviteService activiteService = new ActiviteService(activites, projets, resultats, users, droits);
+    private final ActiviteService activiteService = new ActiviteService(activites, projets, resultats, users,
+            mock(ong.fodde.modules.projets.repository.PerimetreRepository.class), droits);
     private final MontageProjetService montage = new MontageProjetService(projets,
             mock(ObjectifSpecifiqueRepository.class), resultats, activites, indicateurs, budget, financements,
             mock(BailleurRepository.class), activiteService, droits, mapper);
@@ -144,7 +145,7 @@ class MontageProjetTest {
         ProjetResponse p = nouveauProjet();
         UUID r = montage.ajouterResultat(p.id(), new ResultatRequest("Production accrue", null, null), cp).id();
         activiteService.creerActivite(new ActiviteRequest(p.id(), null, r, "Former 100 maraîchers", null, cp.getId(),
-                LocalDate.of(2027, 2, 1), LocalDate.of(2027, 3, 1), null), cp);
+                LocalDate.of(2027, 2, 1), LocalDate.of(2027, 3, 1), null, null, null, null, null), cp);
         Indicateur ind = new Indicateur();
         ind.setResultatId(r);
         lesIndicateurs.add(ind);
@@ -187,7 +188,7 @@ class MontageProjetTest {
     void uneActiviteHorsDesDatesDuProjetEstRefusee() {
         ProjetResponse p = nouveauProjet();
         assertThrows(BusinessException.class, () -> activiteService.creerActivite(new ActiviteRequest(p.id(), null,
-                null, "Trop tard", null, null, LocalDate.of(2029, 1, 1), LocalDate.of(2029, 2, 1), null), rp));
+                null, "Trop tard", null, null, LocalDate.of(2029, 1, 1), LocalDate.of(2029, 2, 1), null, null, null, null, null), rp));
     }
 
     @Test

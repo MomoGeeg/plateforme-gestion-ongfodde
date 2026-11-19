@@ -15,4 +15,6 @@ public interface ActiviteRepository extends JpaRepository<Activite, UUID> {
     List<Activite> findByProjetId(UUID projetId);
 
     List<Activite> findByStatut(StatutActivite statut);
+
+    long countByPerimetreIdAndIsDeletedFalse(UUID perimetreId);
 }

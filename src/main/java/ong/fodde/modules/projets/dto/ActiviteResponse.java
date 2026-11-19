@@ -6,6 +6,7 @@ import java.time.LocalDateTime;
 import java.util.UUID;
 
 import ong.fodde.modules.projets.entity.StatutActivite;
+import ong.fodde.modules.projets.entity.TypeActivite;
 
 public record ActiviteResponse(
         UUID id,
@@ -23,6 +24,11 @@ public record ActiviteResponse(
         Integer tauxAvancement,
         LocalDateTime createdAt,
         UUID resultatId,
-        String responsableNom
+        String responsableNom,
+        TypeActivite type,
+        UUID perimetreId,
+        String perimetreNom,
+        Integer participants,
+        Integer participantsFemmes
 ) {
 }
