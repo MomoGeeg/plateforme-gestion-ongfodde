@@ -48,6 +48,29 @@ public class AcquisitionController {
         return ResponseEntity.ok(acquisitionService.mesAcquisitions(currentUser.getId()));
     }
 
+    /** Achats demandés pour les périmètres du superviseur connecté. */
+    @GetMapping("/supervises")
+    @PreAuthorize("hasAuthority('ROLE_SUPERVISEUR') or hasAuthority('ROLE_ADMIN')")
+    public ResponseEntity<List<AcquisitionResponse>> achatsSupervises(@AuthenticationPrincipal User currentUser) {
+        return ResponseEntity.ok(acquisitionService.achatsSupervises(currentUser));
+    }
+
+    /** Visa du superviseur du périmètre (vérifié par le service). */
+    @PatchMapping("/{id}/viser")
+    @PreAuthorize("hasAuthority('ROLE_SUPERVISEUR') or hasAuthority('ROLE_ADMIN')")
+    public ResponseEntity<AcquisitionResponse> viser(@PathVariable UUID id,
+                                                     @AuthenticationPrincipal User currentUser) {
+        return ResponseEntity.ok(acquisitionService.viser(id, currentUser));
+    }
+
+    @PatchMapping("/{id}/rejeter-superviseur")
+    @PreAuthorize("hasAuthority('ROLE_SUPERVISEUR') or hasAuthority('ROLE_ADMIN')")
+    public ResponseEntity<AcquisitionResponse> rejeterParSuperviseur(@PathVariable UUID id,
+                                                                     @RequestBody Map<String, String> body,
+                                                                     @AuthenticationPrincipal User currentUser) {
+        return ResponseEntity.ok(acquisitionService.rejeterParSuperviseur(id, body.get("motif"), currentUser));
+    }
+
     /** Historique des validations : qui a fait quoi, quand, avec quel motif. */
     @GetMapping("/{id}/historique")
     @PreAuthorize("isAuthenticated()")

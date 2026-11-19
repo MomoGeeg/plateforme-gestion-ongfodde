@@ -54,9 +54,12 @@ public class AcquisitionService {
     @Transactional(readOnly = true)
     public List<EtapeHistorique> historique(UUID id, User user) {
         Acquisition a = getOrThrow(id);
-        accesPersonnel.verifierUtilisateur(a.getSoumisParId(), user, "ROLE_RAF", "ROLE_SE", "ROLE_ADMIN");
+        if (!estSuperviseurDuPerimetre(a, user)) {
+            accesPersonnel.verifierUtilisateur(a.getSoumisParId(), user, "ROLE_RAF", "ROLE_SE", "ROLE_ADMIN");
+        }
         // Acquisitions traitées avant l'historique : la décision est connue, pas son auteur.
         List<EtapeHistorique> anciennes = a.getStatut() == StatutAcquisition.EN_ATTENTE
+                || a.getStatut() == StatutAcquisition.ATTENTE_SUPERVISEUR
                 ? List.of()
                 : List.of(historiqueService.reconstituer(null, a.getStatut(), null, a.getMotifRejet(), null));
         EtapeHistorique creation = historiqueService.reconstituer(null, StatutAcquisition.EN_ATTENTE,
@@ -66,6 +69,7 @@ public class AcquisitionService {
 
     public AcquisitionResponse creerAcquisition(AcquisitionRequest request, UUID soumisParId) {
         Acquisition acq = new Acquisition();
+        StatutAcquisition statutInitial = StatutAcquisition.EN_ATTENTE;
         acq.setCodeActif(request.codeActif());
         acq.setDesignation(request.designation());
         acq.setJustification(request.justification());
@@ -79,6 +83,10 @@ public class AcquisitionService {
             }
             acq.setPerimetreId(perimetre.getId());
             acq.setProjetId(perimetre.getProjetId());
+            // Achat de terrain : le superviseur du périmètre le vise avant le RAF.
+            if (perimetre.getSuperviseurId() != null && !perimetre.getSuperviseurId().equals(soumisParId)) {
+                statutInitial = StatutAcquisition.ATTENTE_SUPERVISEUR;
+            }
         } else if (request.projetId() != null) {
             acq.setProjetId(request.projetId());
         } else {
@@ -87,10 +95,10 @@ public class AcquisitionService {
         acq.setValeur(request.valeur());
         acq.setDateAcquisition(request.dateAcquisition());
         acq.setSoumisParId(soumisParId);
-        acq.setStatut(StatutAcquisition.EN_ATTENTE);
+        acq.setStatut(statutInitial);
 
         Acquisition saved = acquisitionRepository.save(acq);
-        historiqueService.enregistrer(TypeDemande.ACQUISITION, saved.getId(), null, StatutAcquisition.EN_ATTENTE, soumisParId, null);
+        historiqueService.enregistrer(TypeDemande.ACQUISITION, saved.getId(), null, statutInitial, soumisParId, null);
         return toResponse(saved);
     }
 
@@ -102,6 +110,62 @@ public class AcquisitionService {
     @Transactional(readOnly = true)
     public List<AcquisitionResponse> mesAcquisitions(UUID userId) {
         return toResponses(acquisitionRepository.findBySoumisParId(userId));
+    }
+
+    /** Achats demandés pour les périmètres que supervise l'utilisateur. */
+    @Transactional(readOnly = true)
+    public List<AcquisitionResponse> achatsSupervises(User user) {
+        List<UUID> perimetres = perimetreRepository.findBySuperviseurIdAndIsDeletedFalseOrderByNomAsc(user.getId())
+                .stream().map(Perimetre::getId).toList();
+        if (perimetres.isEmpty()) {
+            return List.of();
+        }
+        return toResponses(acquisitionRepository.findByPerimetreIdIn(perimetres).stream()
+                .sorted(java.util.Comparator.comparing(Acquisition::getCreatedAt,
+                        java.util.Comparator.nullsLast(java.util.Comparator.reverseOrder())))
+                .toList());
+    }
+
+    /** Visa du superviseur : l'achat part ensuite au RAF. */
+    public AcquisitionResponse viser(UUID id, User user) {
+        Acquisition acq = attenteSuperviseur(id, user);
+        acq.setStatut(StatutAcquisition.EN_ATTENTE);
+        Acquisition saved = acquisitionRepository.save(acq);
+        historiqueService.enregistrer(TypeDemande.ACQUISITION, id, StatutAcquisition.ATTENTE_SUPERVISEUR,
+                StatutAcquisition.EN_ATTENTE, user.getId(), null);
+        return toResponse(saved);
+    }
+
+    /** Refus du superviseur, motif obligatoire. */
+    public AcquisitionResponse rejeterParSuperviseur(UUID id, String motif, User user) {
+        Acquisition acq = attenteSuperviseur(id, user);
+        if (motif == null || motif.isBlank()) {
+            throw new BusinessException("Le motif de rejet est obligatoire");
+        }
+        acq.setStatut(StatutAcquisition.REJETEE);
+        acq.setMotifRejet(motif);
+        Acquisition saved = acquisitionRepository.save(acq);
+        historiqueService.enregistrer(TypeDemande.ACQUISITION, id, StatutAcquisition.ATTENTE_SUPERVISEUR,
+                StatutAcquisition.REJETEE, user.getId(), motif);
+        return toResponse(saved);
+    }
+
+    private Acquisition attenteSuperviseur(UUID id, User user) {
+        Acquisition acq = getOrThrow(id);
+        if (!estSuperviseurDuPerimetre(acq, user) && !accesPersonnel.aUnRole(user, "ROLE_ADMIN")) {
+            throw new org.springframework.security.access.AccessDeniedException(
+                    "Seul le superviseur du périmètre vise cet achat");
+        }
+        if (acq.getStatut() != StatutAcquisition.ATTENTE_SUPERVISEUR) {
+            throw new BusinessException("Cet achat n'attend pas le visa du superviseur");
+        }
+        return acq;
+    }
+
+    private boolean estSuperviseurDuPerimetre(Acquisition a, User user) {
+        return a.getPerimetreId() != null && perimetreRepository.findById(a.getPerimetreId())
+                .map(p -> user.getId().equals(p.getSuperviseurId()))
+                .orElse(false);
     }
 
     /** Conversion d'une liste : projets et auteurs chargés en une requête chacun. */

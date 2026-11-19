@@ -1,5 +1,6 @@
 package ong.fodde.modules.acquisitions.repository;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 
@@ -17,4 +18,6 @@ public interface AcquisitionRepository extends JpaRepository<Acquisition, UUID> 
     List<Acquisition> findByStatut(StatutAcquisition statut);
 
     List<Acquisition> findBySoumisParId(UUID soumisParId);
+
+    List<Acquisition> findByPerimetreIdIn(Collection<UUID> perimetreIds);
 }
