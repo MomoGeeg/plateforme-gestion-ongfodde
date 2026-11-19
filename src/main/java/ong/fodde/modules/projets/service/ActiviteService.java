@@ -171,6 +171,29 @@ public class ActiviteService {
         }
     }
 
+    /**
+     * Activités du technicien ou du superviseur : celles dont il est responsable et celles
+     * des périmètres qu'il suit.
+     */
+    @Transactional(readOnly = true)
+    public List<ActiviteResponse> mesActivites(User user) {
+        java.util.Set<UUID> perimetres = new java.util.HashSet<>();
+        perimetreRepository.findByTechnicienIdAndIsDeletedFalseOrderByNomAsc(user.getId())
+                .forEach(p -> perimetres.add(p.getId()));
+        perimetreRepository.findBySuperviseurIdAndIsDeletedFalseOrderByNomAsc(user.getId())
+                .forEach(p -> perimetres.add(p.getId()));
+        java.util.Map<UUID, Activite> activites = new java.util.LinkedHashMap<>();
+        activiteRepository.findByResponsableIdAndIsDeletedFalse(user.getId()).forEach(a -> activites.put(a.getId(), a));
+        if (!perimetres.isEmpty()) {
+            activiteRepository.findByPerimetreIdInAndIsDeletedFalse(perimetres)
+                    .forEach(a -> activites.putIfAbsent(a.getId(), a));
+        }
+        return activites.values().stream()
+                .sorted(Comparator.comparing(Activite::getDatePrevuDebut))
+                .map(this::toResponse)
+                .toList();
+    }
+
     @Transactional(readOnly = true)
     public ActiviteResponse obtenirActivite(UUID id) {
         return toResponse(activite(id));

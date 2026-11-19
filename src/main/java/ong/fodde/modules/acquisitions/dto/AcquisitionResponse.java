@@ -22,5 +22,7 @@ public record AcquisitionResponse(
     String soumisPar,
     StatutAcquisition statut,
     String motifRejet,
-    LocalDateTime createdAt
+    LocalDateTime createdAt,
+    UUID perimetreId,
+    String perimetreNom
 ) {}

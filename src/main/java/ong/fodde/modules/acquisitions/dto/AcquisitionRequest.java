@@ -12,8 +12,10 @@ public record AcquisitionRequest(
     @NotBlank String designation,
     String justification,
     CategorieAcquisition categorie,
-    @NotNull UUID projetId,
+    /** Obligatoire sans périmètre ; déduit du périmètre sinon. */
+    UUID projetId,
     @NotNull BigDecimal valeur,
     @NotNull LocalDate dateAcquisition,
-    String codeActif
+    String codeActif,
+    UUID perimetreId
 ) {}

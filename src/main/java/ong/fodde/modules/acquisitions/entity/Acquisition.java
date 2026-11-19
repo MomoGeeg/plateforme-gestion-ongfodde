@@ -45,6 +45,10 @@ public class Acquisition {
     @Column(name = "projet_id", nullable = false, columnDefinition = "uuid")
     private UUID projetId;
 
+    /** Périmètre pour lequel le matériel est demandé (le projet en est déduit). */
+    @Column(name = "perimetre_id", columnDefinition = "uuid")
+    private UUID perimetreId;
+
     @Column(name = "valeur", nullable = false)
     private BigDecimal valeur;
 
