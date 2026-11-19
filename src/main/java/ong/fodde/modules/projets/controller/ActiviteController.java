@@ -64,6 +64,12 @@ public class ActiviteController {
         return ResponseEntity.ok(activiteService.listerActivitesProjet(projetId));
     }
 
+    @GetMapping("/mes-activites")
+    @PreAuthorize("isAuthenticated()")
+    public List<ActiviteResponse> mesActivites(@AuthenticationPrincipal User user) {
+        return activiteService.mesActivites(user);
+    }
+
     @GetMapping("/{id}")
     @PreAuthorize("isAuthenticated()")
     public ResponseEntity<ActiviteResponse> obtenirActivite(@PathVariable UUID id) {

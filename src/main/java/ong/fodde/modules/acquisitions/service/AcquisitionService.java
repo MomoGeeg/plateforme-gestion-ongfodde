@@ -17,6 +17,8 @@ import ong.fodde.modules.historique.dto.EtapeHistorique;
 import ong.fodde.modules.historique.entity.TypeDemande;
 import ong.fodde.modules.historique.service.HistoriqueService;
 import ong.fodde.shared.securite.AccesPersonnel;
+import ong.fodde.modules.projets.entity.Perimetre;
+import ong.fodde.modules.projets.repository.PerimetreRepository;
 import ong.fodde.modules.projets.repository.ProjetRepository;
 import ong.fodde.shared.exception.BusinessException;
 import ong.fodde.shared.exception.ResourceNotFoundException;
@@ -32,17 +34,20 @@ public class AcquisitionService {
     private final ProjetRepository projetRepository;
     private final HistoriqueService historiqueService;
     private final AccesPersonnel accesPersonnel;
+    private final PerimetreRepository perimetreRepository;
 
     public AcquisitionService(AcquisitionRepository acquisitionRepository,
                                UserRepository userRepository,
                                ProjetRepository projetRepository,
                                HistoriqueService historiqueService,
-                               AccesPersonnel accesPersonnel) {
+                               AccesPersonnel accesPersonnel,
+                               PerimetreRepository perimetreRepository) {
         this.acquisitionRepository = acquisitionRepository;
         this.userRepository = userRepository;
         this.projetRepository = projetRepository;
         this.historiqueService = historiqueService;
         this.accesPersonnel = accesPersonnel;
+        this.perimetreRepository = perimetreRepository;
     }
 
     /** Historique de l'acquisition. Visible par le demandeur et par le RAF, le SE et l'administrateur. */
@@ -65,7 +70,20 @@ public class AcquisitionService {
         acq.setDesignation(request.designation());
         acq.setJustification(request.justification());
         acq.setCategorie(request.categorie());
-        acq.setProjetId(request.projetId());
+        if (request.perimetreId() != null) {
+            Perimetre perimetre = perimetreRepository.findById(request.perimetreId())
+                    .filter(p -> !Boolean.TRUE.equals(p.getIsDeleted()))
+                    .orElseThrow(() -> new ResourceNotFoundException("Périmètre introuvable : " + request.perimetreId()));
+            if (request.projetId() != null && !request.projetId().equals(perimetre.getProjetId())) {
+                throw new BusinessException("Ce périmètre n'appartient pas au projet choisi");
+            }
+            acq.setPerimetreId(perimetre.getId());
+            acq.setProjetId(perimetre.getProjetId());
+        } else if (request.projetId() != null) {
+            acq.setProjetId(request.projetId());
+        } else {
+            throw new BusinessException("Choisissez le projet ou le périmètre concerné");
+        }
         acq.setValeur(request.valeur());
         acq.setDateAcquisition(request.dateAcquisition());
         acq.setSoumisParId(soumisParId);
@@ -149,7 +167,10 @@ public class AcquisitionService {
                 soumisPar,
                 a.getStatut(),
                 a.getMotifRejet(),
-                a.getCreatedAt()
+                a.getCreatedAt(),
+                a.getPerimetreId(),
+                a.getPerimetreId() == null ? null : perimetreRepository.findById(a.getPerimetreId())
+                        .map(Perimetre::getNom).orElse(null)
         );
     }
 }
