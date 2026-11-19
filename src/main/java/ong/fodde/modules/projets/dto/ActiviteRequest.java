@@ -6,6 +6,7 @@ import java.util.UUID;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import ong.fodde.modules.projets.entity.TypeActivite;
 
 public record ActiviteRequest(
     @NotNull(message = "L'identifiant du projet est obligatoire")
@@ -29,5 +30,14 @@ public record ActiviteRequest(
     @NotNull(message = "La date prévue de fin est obligatoire")
     LocalDate datePrevuFin,
 
-    BigDecimal budgetAlloue
+    BigDecimal budgetAlloue,
+
+    /** ACTIVITE par défaut ; FORMATION pour une formation. */
+    TypeActivite type,
+
+    UUID perimetreId,
+
+    Integer participants,
+
+    Integer participantsFemmes
 ) {}

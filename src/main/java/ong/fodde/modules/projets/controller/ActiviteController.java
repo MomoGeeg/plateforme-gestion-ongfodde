@@ -78,6 +78,16 @@ public class ActiviteController {
         return ResponseEntity.ok(activiteService.mettreAJourAvancement(id, taux, statut));
     }
 
+    /** Responsable de l'activité, chef de projet ou RP (vérifié par le service). */
+    @PatchMapping("/{id}/participants")
+    @PreAuthorize("isAuthenticated()")
+    public ActiviteResponse enregistrerParticipants(@PathVariable UUID id,
+                                                    @RequestParam(required = false) Integer participants,
+                                                    @RequestParam(required = false) Integer femmes,
+                                                    @AuthenticationPrincipal User user) {
+        return activiteService.enregistrerParticipants(id, participants, femmes, user);
+    }
+
     @PatchMapping("/{id}/demarrer")
     @PreAuthorize("hasAuthority('ROLE_RESPONSABLE_PROGRAMMES') or hasAuthority('ROLE_CHARGE_PROGRAMME') or hasAuthority('ROLE_ADMIN')")
     public ResponseEntity<ActiviteResponse> demarrerActivite(@PathVariable UUID id,

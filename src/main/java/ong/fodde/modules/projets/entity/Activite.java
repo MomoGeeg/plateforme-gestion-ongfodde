@@ -61,4 +61,19 @@ public class Activite extends BaseEntity {
     @Enumerated(EnumType.STRING)
     @Column(name = "statut", nullable = false, columnDefinition = "statut_activite")
     private StatutActivite statut = StatutActivite.PLANIFIEE;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "type_activite", length = 30, nullable = false)
+    private TypeActivite type = TypeActivite.ACTIVITE;
+
+    /** Périmètre où l'activité se déroule (même projet). */
+    @Column(name = "perimetre_id", columnDefinition = "uuid")
+    private UUID perimetreId;
+
+    /** Participants réellement présents (formations surtout), dont femmes. */
+    @Column(name = "participants")
+    private Integer participants;
+
+    @Column(name = "participants_femmes")
+    private Integer participantsFemmes;
 }

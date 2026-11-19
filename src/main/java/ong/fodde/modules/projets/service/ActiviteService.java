@@ -14,10 +14,13 @@ import ong.fodde.modules.auth.repository.UserRepository;
 import ong.fodde.modules.projets.dto.ActiviteRequest;
 import ong.fodde.modules.projets.dto.ActiviteResponse;
 import ong.fodde.modules.projets.entity.Activite;
+import ong.fodde.modules.projets.entity.Perimetre;
 import ong.fodde.modules.projets.entity.Projet;
 import ong.fodde.modules.projets.entity.StatutActivite;
 import ong.fodde.modules.projets.entity.StatutProjet;
+import ong.fodde.modules.projets.entity.TypeActivite;
 import ong.fodde.modules.projets.repository.ActiviteRepository;
+import ong.fodde.modules.projets.repository.PerimetreRepository;
 import ong.fodde.modules.projets.repository.ProjetRepository;
 import ong.fodde.modules.projets.repository.ResultatAttenduRepository;
 import ong.fodde.shared.exception.BusinessException;
@@ -36,15 +39,17 @@ public class ActiviteService {
     private final ProjetRepository projetRepository;
     private final ResultatAttenduRepository resultatRepository;
     private final UserRepository userRepository;
+    private final PerimetreRepository perimetreRepository;
     private final DroitsProjet droits;
 
     public ActiviteService(ActiviteRepository activiteRepository, ProjetRepository projetRepository,
                            ResultatAttenduRepository resultatRepository, UserRepository userRepository,
-                           DroitsProjet droits) {
+                           PerimetreRepository perimetreRepository, DroitsProjet droits) {
         this.activiteRepository = activiteRepository;
         this.projetRepository = projetRepository;
         this.resultatRepository = resultatRepository;
         this.userRepository = userRepository;
+        this.perimetreRepository = perimetreRepository;
         this.droits = droits;
     }
 
@@ -109,11 +114,24 @@ public class ActiviteService {
         if (r.budgetAlloue() != null && r.budgetAlloue().signum() < 0) {
             throw new BusinessException("Le budget de l'activité ne peut pas être négatif");
         }
+        Perimetre perimetre = null;
+        if (r.perimetreId() != null) {
+            perimetre = perimetreRepository.findById(r.perimetreId())
+                    .filter(pe -> !Boolean.TRUE.equals(pe.getIsDeleted()) && pe.getProjetId().equals(projet.getId()))
+                    .orElseThrow(() -> new BusinessException("Ce périmètre n'appartient pas au projet"));
+        }
+        verifierParticipants(r.participants(), r.participantsFemmes());
+        a.setType(r.type() != null ? r.type() : TypeActivite.ACTIVITE);
+        a.setPerimetreId(r.perimetreId());
+        a.setParticipants(r.participants());
+        a.setParticipantsFemmes(r.participantsFemmes());
         a.setTitre(r.titre().trim());
         a.setDescription(r.description());
         a.setResultatId(r.resultatId());
         a.setParentId(r.parentId());
-        a.setResponsableId(r.responsableId());
+        // Sans responsable désigné, l'activité d'un périmètre revient à son technicien.
+        a.setResponsableId(r.responsableId() != null ? r.responsableId()
+                : perimetre != null ? perimetre.getTechnicienId() : null);
         a.setDatePrevuDebut(r.datePrevuDebut());
         a.setDatePrevuFin(r.datePrevuFin());
         a.setBudgetAlloue(r.budgetAlloue());
@@ -126,6 +144,31 @@ public class ActiviteService {
                 .sorted(Comparator.comparing(Activite::getDatePrevuDebut))
                 .map(this::toResponse)
                 .toList();
+    }
+
+    /**
+     * Participants réellement présents (une formation surtout). Le responsable de l'activité,
+     * le chef de projet ou le RP les saisissent, à tout moment.
+     */
+    public ActiviteResponse enregistrerParticipants(UUID id, Integer participants, Integer femmes, User user) {
+        Activite activite = activite(id);
+        Projet projet = projet(activite.getProjetId());
+        if (!user.getId().equals(activite.getResponsableId()) && !droits.estGestionnaire(projet, user)) {
+            throw new AccessDeniedException("Seuls le responsable de l'activité, le chef de projet et le RP saisissent les participants");
+        }
+        verifierParticipants(participants, femmes);
+        activite.setParticipants(participants);
+        activite.setParticipantsFemmes(femmes);
+        return toResponse(activiteRepository.save(activite));
+    }
+
+    private static void verifierParticipants(Integer participants, Integer femmes) {
+        if ((participants != null && participants < 0) || (femmes != null && femmes < 0)) {
+            throw new BusinessException("Le nombre de participants ne peut pas être négatif");
+        }
+        if (femmes != null && (participants == null || femmes > participants)) {
+            throw new BusinessException("Le nombre de femmes ne peut pas dépasser le nombre de participants");
+        }
     }
 
     @Transactional(readOnly = true)
@@ -182,6 +225,12 @@ public class ActiviteService {
                 a.getCreatedAt(),
                 a.getResultatId(),
                 a.getResponsableId() == null ? null : userRepository.findById(a.getResponsableId())
-                        .map(u -> u.getPrenom() + " " + u.getNom()).orElse(null));
+                        .map(u -> u.getPrenom() + " " + u.getNom()).orElse(null),
+                a.getType(),
+                a.getPerimetreId(),
+                a.getPerimetreId() == null ? null : perimetreRepository.findById(a.getPerimetreId())
+                        .map(Perimetre::getNom).orElse(null),
+                a.getParticipants(),
+                a.getParticipantsFemmes());
     }
 }
