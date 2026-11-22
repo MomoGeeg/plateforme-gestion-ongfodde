@@ -31,15 +31,20 @@ import ong.fodde.modules.projets.entity.StatutSuivi;
 import ong.fodde.modules.projets.entity.SuiviMensuel;
 import ong.fodde.modules.projets.entity.TypeActivite;
 import ong.fodde.modules.projets.entity.TypeSuivi;
+import ong.fodde.modules.projets.entity.AnimateurProjet;
+import ong.fodde.modules.projets.entity.Projet;
 import ong.fodde.modules.projets.repository.ActiviteRepository;
+import ong.fodde.modules.projets.repository.AnimateurProjetRepository;
 import ong.fodde.modules.projets.repository.PerimetreRepository;
+import ong.fodde.modules.projets.repository.ProjetRepository;
 import ong.fodde.modules.projets.repository.SuiviMensuelRepository;
 import ong.fodde.shared.exception.BusinessException;
 import ong.fodde.shared.exception.ResourceNotFoundException;
 
 /**
- * Suivi mensuel du terrain : le technicien remet son planning et son rapport du mois, le superviseur
- * de ses périmètres les valide ou les renvoie à revoir. Le superviseur voit aussi son équipe.
+ * Suivi mensuel du terrain : le technicien (ou l'animateur) remet son planning et son rapport du
+ * mois ; le superviseur de ses périmètres (ou le coordonnateur de ses projets) les valide ou les
+ * renvoie à revoir, et voit son équipe.
  */
 @Service
 @Transactional
@@ -49,15 +54,20 @@ public class SuiviTerrainService {
     private final PerimetreRepository perimetreRepository;
     private final ActiviteRepository activiteRepository;
     private final UserRepository userRepository;
+    private final AnimateurProjetRepository animateurRepository;
+    private final ProjetRepository projetRepository;
     private final DroitsProjet droits;
 
     public SuiviTerrainService(SuiviMensuelRepository suiviRepository, PerimetreRepository perimetreRepository,
                                ActiviteRepository activiteRepository, UserRepository userRepository,
+                               AnimateurProjetRepository animateurRepository, ProjetRepository projetRepository,
                                DroitsProjet droits) {
         this.suiviRepository = suiviRepository;
         this.perimetreRepository = perimetreRepository;
         this.activiteRepository = activiteRepository;
         this.userRepository = userRepository;
+        this.animateurRepository = animateurRepository;
+        this.projetRepository = projetRepository;
         this.droits = droits;
     }
 
@@ -67,11 +77,13 @@ public class SuiviTerrainService {
      */
     public SuiviResponse soumettre(SuiviRequest request, User user) {
         List<Perimetre> perimetres = perimetreRepository.findByTechnicienIdAndIsDeletedFalseOrderByNomAsc(user.getId());
-        if (perimetres.isEmpty()) {
-            throw new BusinessException("Aucun périmètre ne vous est affecté");
+        List<Projet> projets = projetsAnimes(user.getId());
+        if (perimetres.isEmpty() && projets.isEmpty()) {
+            throw new BusinessException("Aucun périmètre ni projet ne vous est affecté");
         }
-        if (perimetres.stream().allMatch(p -> p.getSuperviseurId() == null)) {
-            throw new BusinessException("Aucun superviseur n'est affecté à vos périmètres");
+        if (perimetres.stream().allMatch(p -> p.getSuperviseurId() == null)
+                && projets.stream().allMatch(p -> p.getChefProjetId() == null)) {
+            throw new BusinessException("Personne n'est désigné pour valider vos documents");
         }
         YearMonth mois = YearMonth.parse(request.mois());
         if (request.type() == TypeSuivi.RAPPORT && mois.isAfter(YearMonth.now())) {
@@ -100,10 +112,11 @@ public class SuiviTerrainService {
                 .map(this::toResponse).toList();
     }
 
-    /** Plannings et rapports des techniciens encadrés par le superviseur connecté. */
+    /** Plannings et rapports des techniciens et animateurs encadrés par l'utilisateur connecté. */
     @Transactional(readOnly = true)
     public List<SuiviResponse> suivisEquipe(User user) {
-        Set<UUID> techniciens = techniciensEncadres(user.getId()).keySet();
+        Set<UUID> techniciens = new java.util.HashSet<>(techniciensEncadres(user.getId()).keySet());
+        techniciens.addAll(animateursEncadres(user.getId()).keySet());
         if (techniciens.isEmpty()) {
             return List.of();
         }
@@ -117,7 +130,7 @@ public class SuiviTerrainService {
                 .filter(s -> !Boolean.TRUE.equals(s.getIsDeleted()))
                 .orElseThrow(() -> new ResourceNotFoundException("Document introuvable : " + id));
         if (!estSuperviseurDe(user, suivi.getTechnicienId())) {
-            throw new AccessDeniedException("Seul le superviseur du technicien valide ses documents");
+            throw new AccessDeniedException("Seul le superviseur ou le coordonnateur valide ces documents");
         }
         if (suivi.getStatut() != StatutSuivi.SOUMIS) {
             throw new BusinessException("Ce document a déjà été traité");
@@ -135,25 +148,55 @@ public class SuiviTerrainService {
         return toResponse(suiviRepository.save(suivi));
     }
 
-    /** Techniciens encadrés, avec l'avancement des activités des périmètres supervisés. */
+    /**
+     * Équipe encadrée : techniciens des périmètres supervisés et animateurs des projets coordonnés,
+     * avec l'avancement de leurs activités.
+     */
     @Transactional(readOnly = true)
     public List<MembreEquipe> equipe(User user) {
         Map<UUID, List<Perimetre>> parTechnicien = techniciensEncadres(user.getId());
-        if (parTechnicien.isEmpty()) {
+        Map<UUID, List<Projet>> parAnimateur = animateursEncadres(user.getId());
+        if (parTechnicien.isEmpty() && parAnimateur.isEmpty()) {
             return List.of();
         }
+        Set<UUID> membres = new java.util.HashSet<>(parTechnicien.keySet());
+        membres.addAll(parAnimateur.keySet());
         Map<UUID, List<SuiviMensuel>> suivis = suiviRepository
-                .findByTechnicienIdInAndIsDeletedFalseOrderByMoisDescTypeAsc(parTechnicien.keySet()).stream()
+                .findByTechnicienIdInAndIsDeletedFalseOrderByMoisDescTypeAsc(membres).stream()
                 .collect(Collectors.groupingBy(SuiviMensuel::getTechnicienId));
         String moisCourant = YearMonth.now().toString();
         LocalDate jour = LocalDate.now();
         List<MembreEquipe> equipe = new ArrayList<>();
+        Map<UUID, List<Activite>> activitesParMembre = new LinkedHashMap<>();
+        Map<UUID, List<String>> lieuxParMembre = new LinkedHashMap<>();
         parTechnicien.forEach((technicienId, perimetres) -> {
-            List<Activite> activites = activiteRepository
-                    .findByPerimetreIdInAndIsDeletedFalse(perimetres.stream().map(Perimetre::getId).toList()).stream()
+            activitesParMembre.put(technicienId, activiteRepository
+                    .findByPerimetreIdInAndIsDeletedFalse(perimetres.stream().map(Perimetre::getId).toList()));
+            lieuxParMembre.put(technicienId, perimetres.stream().map(Perimetre::getNom).toList());
+        });
+        parAnimateur.forEach((animateurId, projets) -> {
+            Set<UUID> ids = projets.stream().map(Projet::getId).collect(Collectors.toSet());
+            List<Activite> siennes = activiteRepository.findByResponsableIdAndIsDeletedFalse(animateurId).stream()
+                    .filter(a -> ids.contains(a.getProjetId())).toList();
+            activitesParMembre.merge(animateurId, siennes, (x, y) -> {
+                List<Activite> tout = new ArrayList<>(x);
+                y.stream().filter(a -> !tout.contains(a)).forEach(tout::add);
+                return tout;
+            });
+            lieuxParMembre.merge(animateurId, projets.stream().map(Projet::getCode).toList(), (x, y) -> {
+                List<String> tout = new ArrayList<>(x);
+                tout.addAll(y);
+                return tout;
+            });
+        });
+        activitesParMembre.forEach((technicienId, toutes) -> {
+            List<String> perimetres = lieuxParMembre.getOrDefault(technicienId, List.of());
+            List<Activite> activites = toutes.stream()
                     .filter(a -> a.getStatut() != StatutActivite.ANNULEE)
                     .toList();
             List<Activite> formations = activites.stream().filter(a -> a.getType() == TypeActivite.FORMATION).toList();
+            int personnes = activites.stream()
+                    .mapToInt(a -> a.getParticipants() == null ? 0 : a.getParticipants()).sum();
             List<SuiviMensuel> siens = suivis.getOrDefault(technicienId, List.of());
             SuiviMensuel planning = siens.stream()
                     .filter(s -> s.getType() == TypeSuivi.PLANNING && moisCourant.equals(s.getMois()))
@@ -161,12 +204,12 @@ public class SuiviTerrainService {
             SuiviMensuel rapport = siens.stream().filter(s -> s.getType() == TypeSuivi.RAPPORT)
                     .findFirst().orElse(null);
             equipe.add(new MembreEquipe(technicienId, nomDe(technicienId),
-                    perimetres.stream().map(Perimetre::getNom).toList(),
+                    perimetres,
                     activites.size(),
                     (int) activites.stream().filter(a -> a.getStatut() == StatutActivite.REALISEE).count(),
                     (int) activites.stream().filter(a -> enRetard(a, jour)).count(),
                     (int) formations.stream().filter(a -> a.getStatut() == StatutActivite.REALISEE).count(),
-                    formations.stream().mapToInt(a -> a.getParticipants() == null ? 0 : a.getParticipants()).sum(),
+                    personnes,
                     planning == null ? null : planning.getStatut(),
                     rapport == null ? null : rapport.getStatut(),
                     rapport == null ? null : rapport.getMois()));
@@ -175,13 +218,35 @@ public class SuiviTerrainService {
         return equipe;
     }
 
-    /** Vrai si l'utilisateur supervise au moins un périmètre de ce technicien. */
+    /**
+     * Vrai si l'utilisateur supervise au moins un périmètre de ce technicien, ou coordonne au moins
+     * un projet de cet animateur.
+     */
     public boolean estSuperviseurDe(User user, UUID technicienId) {
         if (droits.aUnRole(user, "ROLE_ADMIN")) {
             return true;
         }
         return perimetreRepository.findByTechnicienIdAndIsDeletedFalseOrderByNomAsc(technicienId).stream()
-                .anyMatch(p -> user.getId().equals(p.getSuperviseurId()));
+                .anyMatch(p -> user.getId().equals(p.getSuperviseurId()))
+                || projetsAnimes(technicienId).stream().anyMatch(p -> user.getId().equals(p.getChefProjetId()));
+    }
+
+    private List<Projet> projetsAnimes(UUID animateurId) {
+        return animateurRepository.findByAnimateurIdAndIsDeletedFalse(animateurId).stream()
+                .map(a -> projetRepository.findById(a.getProjetId()).orElse(null))
+                .filter(Objects::nonNull)
+                .toList();
+    }
+
+    /** Animateurs des projets dont l'utilisateur est le coordonnateur. */
+    private Map<UUID, List<Projet>> animateursEncadres(UUID coordonnateurId) {
+        Map<UUID, List<Projet>> parAnimateur = new LinkedHashMap<>();
+        for (Projet projet : projetRepository.findByChefProjetId(coordonnateurId)) {
+            for (AnimateurProjet a : animateurRepository.findByProjetIdAndIsDeletedFalse(projet.getId())) {
+                parAnimateur.computeIfAbsent(a.getAnimateurId(), k -> new ArrayList<>()).add(projet);
+            }
+        }
+        return parAnimateur;
     }
 
     private Map<UUID, List<Perimetre>> techniciensEncadres(UUID superviseurId) {

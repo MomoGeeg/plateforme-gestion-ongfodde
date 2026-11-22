@@ -18,6 +18,8 @@ public interface ProjetRepository extends JpaRepository<Projet, UUID> {
 
     List<Projet> findByResponsableId(UUID responsableId);
 
+    List<Projet> findByChefProjetId(UUID chefProjetId);
+
     boolean existsByCode(String code);
 
     // Projets où l'utilisateur est membre de l'équipe

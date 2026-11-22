@@ -54,6 +54,7 @@ public class OrganisationService {
         RATTACHEMENTS.put("ROLE_CHARGE_PROGRAMME", new Rattachement(Pole.PROGRAMMES, "ROLE_RESPONSABLE_PROGRAMMES"));
         RATTACHEMENTS.put("ROLE_SUPERVISEUR", new Rattachement(Pole.PROGRAMMES, "ROLE_RESPONSABLE_PROGRAMMES"));
         RATTACHEMENTS.put("ROLE_TECHNICIEN_TERRAIN", new Rattachement(Pole.PROGRAMMES, "ROLE_RESPONSABLE_PROGRAMMES"));
+        RATTACHEMENTS.put("ROLE_ANIMATEUR", new Rattachement(Pole.PROGRAMMES, "ROLE_RESPONSABLE_PROGRAMMES"));
         // Le responsable RED/CAP/COM n'a pas de rôle dans l'application : les RH choisissent le chef.
         RATTACHEMENTS.put("ROLE_CHARGE_COMMUNICATION", new Rattachement(Pole.RED_CAP_COM, null));
     }

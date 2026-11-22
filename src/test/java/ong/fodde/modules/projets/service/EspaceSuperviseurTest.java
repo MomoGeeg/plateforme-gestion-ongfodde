@@ -63,7 +63,7 @@ class EspaceSuperviseurTest {
     private final AcquisitionService acquisitionService = new AcquisitionService(acquisitions, users, projets,
             mock(HistoriqueService.class), acces, perimetres);
     private final SuiviTerrainService suiviService = new SuiviTerrainService(suivis, perimetres, activites, users,
-            new DroitsProjet(acces));
+            mock(ong.fodde.modules.projets.repository.AnimateurProjetRepository.class), projets, new DroitsProjet(acces));
 
     private User technicien;
     private User superviseur;

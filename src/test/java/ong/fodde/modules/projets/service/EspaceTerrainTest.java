@@ -47,7 +47,7 @@ class EspaceTerrainTest {
     private final AcquisitionRepository acquisitions = mock(AcquisitionRepository.class);
     private final AccesPersonnel acces = new AccesPersonnel(mock(EmployeRepository.class));
     private final ActiviteService activiteService = new ActiviteService(activites, projets,
-            mock(ResultatAttenduRepository.class), users, perimetres, new DroitsProjet(acces));
+            mock(ResultatAttenduRepository.class), users, perimetres, mock(ong.fodde.modules.projets.repository.AnimateurProjetRepository.class), mock(ong.fodde.modules.projets.repository.PieceActiviteRepository.class), new DroitsProjet(acces));
     private final AcquisitionService acquisitionService = new AcquisitionService(acquisitions, users, projets,
             mock(HistoriqueService.class), acces, perimetres);
 

@@ -84,14 +84,18 @@ public class ActiviteController {
         return ResponseEntity.ok(activiteService.mettreAJourAvancement(id, taux, statut));
     }
 
-    /** Responsable de l'activité, chef de projet ou RP (vérifié par le service). */
-    @PatchMapping("/{id}/participants")
+    /** Fiche de suivi ; responsable de l'activité, chef de projet ou RP (vérifié par le service). */
+    @PatchMapping("/{id}/fiche-suivi")
     @PreAuthorize("isAuthenticated()")
-    public ActiviteResponse enregistrerParticipants(@PathVariable UUID id,
-                                                    @RequestParam(required = false) Integer participants,
-                                                    @RequestParam(required = false) Integer femmes,
-                                                    @AuthenticationPrincipal User user) {
-        return activiteService.enregistrerParticipants(id, participants, femmes, user);
+    public ActiviteResponse enregistrerFicheSuivi(@PathVariable UUID id, @RequestBody java.util.Map<String, String> body,
+                                                  @AuthenticationPrincipal User user) {
+        return activiteService.enregistrerFicheSuivi(id, body.get("ficheSuivi"), user);
+    }
+
+    @PatchMapping("/{id}/realisee")
+    @PreAuthorize("isAuthenticated()")
+    public ActiviteResponse marquerRealisee(@PathVariable UUID id, @AuthenticationPrincipal User user) {
+        return activiteService.marquerRealisee(id, user);
     }
 
     @PatchMapping("/{id}/demarrer")

@@ -29,6 +29,11 @@ public record ActiviteResponse(
         UUID perimetreId,
         String perimetreNom,
         Integer participants,
-        Integer participantsFemmes
+        Integer participantsFemmes,
+        String lieu,
+        String ficheSuivi,
+        /** Nom du fichier de la liste de présence, null s'il n'y en a pas. */
+        String listePresence,
+        long nbPhotos
 ) {
 }
