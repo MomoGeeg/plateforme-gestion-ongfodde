@@ -52,7 +52,7 @@ class PerimetreTest {
     private final DroitsProjet droits = new DroitsProjet(new AccesPersonnel(mock(EmployeRepository.class)));
     private final PerimetreService service = new PerimetreService(perimetres, projets, activites, users, droits);
     private final ActiviteService activiteService = new ActiviteService(activites, projets,
-            mock(ResultatAttenduRepository.class), users, perimetres, droits);
+            mock(ResultatAttenduRepository.class), users, perimetres, mock(ong.fodde.modules.projets.repository.AnimateurProjetRepository.class), mock(ong.fodde.modules.projets.repository.PieceActiviteRepository.class), droits);
 
     private final List<Perimetre> lesPerimetres = new ArrayList<>();
     private Projet projet;
@@ -196,7 +196,7 @@ class PerimetreTest {
     private ActiviteRequest formation(UUID perimetreId, Integer participants, Integer femmes) {
         return new ActiviteRequest(projet.getId(), null, null, "Formation au compost bocashi", null, null,
                 LocalDate.of(2026, 12, 1), LocalDate.of(2026, 12, 2), null,
-                TypeActivite.FORMATION, perimetreId, participants, femmes);
+                TypeActivite.FORMATION, perimetreId, "Saré Yoba");
     }
 
     @Test
@@ -212,7 +212,7 @@ class PerimetreTest {
     @Test
     void uneActiviteSansTypeEstUneActiviteOrdinaire() {
         ActiviteRequest r = new ActiviteRequest(projet.getId(), null, null, "Piquetage", null, null,
-                LocalDate.of(2026, 12, 1), LocalDate.of(2026, 12, 2), null, null, null, null, null);
+                LocalDate.of(2026, 12, 1), LocalDate.of(2026, 12, 2), null, null, null, null);
         ActiviteResponse a = activiteService.creerActivite(r, chef);
         assertEquals(TypeActivite.ACTIVITE, a.type());
         assertNull(a.perimetreId());
@@ -225,27 +225,5 @@ class PerimetreTest {
         ailleurs.setProjetId(UUID.randomUUID());
         when(perimetres.findById(ailleurs.getId())).thenReturn(Optional.of(ailleurs));
         assertThrows(BusinessException.class, () -> activiteService.creerActivite(formation(ailleurs.getId(), null, null), chef));
-    }
-
-    @Test
-    void plusDeFemmesQueDeParticipantsEstRefuse() {
-        assertThrows(BusinessException.class, () -> activiteService.creerActivite(formation(null, 10, 12), chef));
-        assertThrows(BusinessException.class, () -> activiteService.creerActivite(formation(null, -1, null), chef));
-    }
-
-    @Test
-    void leTechnicienResponsableSaisitLesParticipants() {
-        PerimetreResponse p = service.creer(demande(technicien.getId(), superviseur.getId()), chef);
-        ActiviteResponse a = activiteService.creerActivite(formation(p.id(), null, null), chef);
-        ActiviteResponse apres = activiteService.enregistrerParticipants(a.id(), 25, 22, technicien);
-        assertEquals(25, apres.participants());
-        assertEquals(22, apres.participantsFemmes());
-    }
-
-    @Test
-    void unAutreCompteNeSaisitPasLesParticipants() {
-        PerimetreResponse p = service.creer(demande(technicien.getId(), superviseur.getId()), chef);
-        ActiviteResponse a = activiteService.creerActivite(formation(p.id(), null, null), chef);
-        assertThrows(AccessDeniedException.class, () -> activiteService.enregistrerParticipants(a.id(), 25, 22, autre));
     }
 }

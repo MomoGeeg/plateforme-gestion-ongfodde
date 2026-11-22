@@ -41,27 +41,24 @@ public class SuiviTerrainController {
     }
 
     @PostMapping
-    @PreAuthorize("hasAuthority('ROLE_TECHNICIEN_TERRAIN')")
+    @PreAuthorize("hasAuthority('ROLE_TECHNICIEN_TERRAIN') or hasAuthority('ROLE_ANIMATEUR')")
     public ResponseEntity<SuiviResponse> soumettre(@Valid @RequestBody SuiviRequest request,
                                                    @AuthenticationPrincipal User user) {
         return ResponseEntity.status(HttpStatus.CREATED).body(service.soumettre(request, user));
     }
 
     @GetMapping("/equipe")
-    @PreAuthorize("hasAuthority('ROLE_SUPERVISEUR') or hasAuthority('ROLE_ADMIN')")
     public List<SuiviResponse> suivisEquipe(@AuthenticationPrincipal User user) {
         return service.suivisEquipe(user);
     }
 
     @GetMapping("/equipe/membres")
-    @PreAuthorize("hasAuthority('ROLE_SUPERVISEUR') or hasAuthority('ROLE_ADMIN')")
     public List<MembreEquipe> equipe(@AuthenticationPrincipal User user) {
         return service.equipe(user);
     }
 
-    /** Superviseur du technicien (vérifié par le service). */
+    /** Superviseur du technicien ou coordonnateur de l'animateur (vérifié par le service). */
     @PatchMapping("/{id}/decision")
-    @PreAuthorize("hasAuthority('ROLE_SUPERVISEUR') or hasAuthority('ROLE_ADMIN')")
     public SuiviResponse decider(@PathVariable UUID id, @Valid @RequestBody DecisionRequest request,
                                  @AuthenticationPrincipal User user) {
         return service.decider(id, request, user);

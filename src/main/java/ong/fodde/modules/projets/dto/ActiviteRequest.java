@@ -32,12 +32,11 @@ public record ActiviteRequest(
 
     BigDecimal budgetAlloue,
 
-    /** ACTIVITE par défaut ; FORMATION pour une formation. */
+    /** ACTIVITE par défaut ; FORMATION, SENSIBILISATION ou SUIVI sur le terrain. */
     TypeActivite type,
 
     UUID perimetreId,
 
-    Integer participants,
-
-    Integer participantsFemmes
+    /** Village, quartier, école… Les participants viennent de la liste de présence, pas d'ici. */
+    String lieu
 ) {}

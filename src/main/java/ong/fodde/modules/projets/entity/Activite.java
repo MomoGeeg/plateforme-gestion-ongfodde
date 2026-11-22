@@ -76,4 +76,12 @@ public class Activite extends BaseEntity {
 
     @Column(name = "participants_femmes")
     private Integer participantsFemmes;
+
+    /** Village, quartier, école… où se déroule l'activité. */
+    @Column(name = "lieu", length = 200)
+    private String lieu;
+
+    /** Résultats, difficultés et recommandations, rédigés après l'activité. */
+    @Column(name = "fiche_suivi", columnDefinition = "text")
+    private String ficheSuivi;
 }

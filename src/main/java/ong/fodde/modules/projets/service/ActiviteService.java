@@ -19,7 +19,10 @@ import ong.fodde.modules.projets.entity.Projet;
 import ong.fodde.modules.projets.entity.StatutActivite;
 import ong.fodde.modules.projets.entity.StatutProjet;
 import ong.fodde.modules.projets.entity.TypeActivite;
+import ong.fodde.modules.projets.entity.TypePiece;
 import ong.fodde.modules.projets.repository.ActiviteRepository;
+import ong.fodde.modules.projets.repository.AnimateurProjetRepository;
+import ong.fodde.modules.projets.repository.PieceActiviteRepository;
 import ong.fodde.modules.projets.repository.PerimetreRepository;
 import ong.fodde.modules.projets.repository.ProjetRepository;
 import ong.fodde.modules.projets.repository.ResultatAttenduRepository;
@@ -40,40 +43,130 @@ public class ActiviteService {
     private final ResultatAttenduRepository resultatRepository;
     private final UserRepository userRepository;
     private final PerimetreRepository perimetreRepository;
+    private final AnimateurProjetRepository animateurRepository;
+    private final PieceActiviteRepository pieceRepository;
     private final DroitsProjet droits;
 
     public ActiviteService(ActiviteRepository activiteRepository, ProjetRepository projetRepository,
                            ResultatAttenduRepository resultatRepository, UserRepository userRepository,
-                           PerimetreRepository perimetreRepository, DroitsProjet droits) {
+                           PerimetreRepository perimetreRepository, AnimateurProjetRepository animateurRepository,
+                           PieceActiviteRepository pieceRepository, DroitsProjet droits) {
         this.activiteRepository = activiteRepository;
         this.projetRepository = projetRepository;
         this.resultatRepository = resultatRepository;
         this.userRepository = userRepository;
         this.perimetreRepository = perimetreRepository;
+        this.animateurRepository = animateurRepository;
+        this.pieceRepository = pieceRepository;
         this.droits = droits;
     }
 
     public ActiviteResponse creerActivite(ActiviteRequest request, User user) {
         Projet projet = projet(request.projetId());
-        verifierPlanification(projet, user);
+        boolean parAnimateur = planifieParAnimateur(projet, user);
+        if (!parAnimateur) {
+            verifierPlanification(projet, user);
+        }
         Activite activite = new Activite();
         activite.setProjetId(projet.getId());
         activite.setStatut(StatutActivite.PLANIFIEE);
         activite.setTauxAvancement(0);
         remplir(activite, projet, request);
+        if (parAnimateur) {
+            activite.setResponsableId(user.getId());
+        }
         return toResponse(activiteRepository.save(activite));
     }
 
-    /** Une activité se modifie tant qu'elle n'a pas démarré. */
+    /** Une activité se modifie tant qu'elle n'a pas démarré ; l'animateur ne modifie que les siennes. */
     public ActiviteResponse modifierActivite(UUID id, ActiviteRequest request, User user) {
         Activite activite = activite(id);
         Projet projet = projet(activite.getProjetId());
-        verifierPlanification(projet, user);
+        boolean parAnimateur = planifieParAnimateur(projet, user);
+        if (parAnimateur && !user.getId().equals(activite.getResponsableId())) {
+            throw new AccessDeniedException("Un animateur ne modifie que ses propres activités");
+        }
+        if (!parAnimateur) {
+            verifierPlanification(projet, user);
+        }
         if (activite.getStatut() != StatutActivite.PLANIFIEE) {
             throw new BusinessException("Une activité démarrée ne se replanifie pas ici");
         }
         remplir(activite, projet, request);
+        if (parAnimateur) {
+            activite.setResponsableId(user.getId());
+        }
         return toResponse(activiteRepository.save(activite));
+    }
+
+    /**
+     * Vrai si un animateur du projet (sans droit de gestion) planifie ses propres activités. Elles
+     * lui reviennent d'office ; le projet doit être actif.
+     */
+    private boolean planifieParAnimateur(Projet projet, User user) {
+        if (droits.estGestionnaire(projet, user)
+                || !animateurRepository.existsByProjetIdAndAnimateurIdAndIsDeletedFalse(projet.getId(), user.getId())) {
+            return false;
+        }
+        if (projet.getStatut() != StatutProjet.ACTIF) {
+            throw new BusinessException("Les activités se planifient sur un projet actif");
+        }
+        return true;
+    }
+
+    /**
+     * Vrai si l'utilisateur renseigne l'activité (fiche de suivi, liste de présence, photos) :
+     * son responsable, le technicien de son périmètre, le chef de projet ou le RP.
+     */
+    public boolean peutRenseigner(Activite activite, User user) {
+        if (user.getId().equals(activite.getResponsableId())) {
+            return true;
+        }
+        if (activite.getPerimetreId() != null && perimetreRepository.findById(activite.getPerimetreId())
+                .map(p -> user.getId().equals(p.getTechnicienId())).orElse(false)) {
+            return true;
+        }
+        return droits.estGestionnaire(projet(activite.getProjetId()), user);
+    }
+
+    private void verifierRenseignement(Activite activite, User user) {
+        if (!peutRenseigner(activite, user)) {
+            throw new AccessDeniedException("Seuls le responsable de l'activité, le chef de projet et le RP la renseignent");
+        }
+    }
+
+    /** Fiche de suivi : résultats, difficultés, recommandations. */
+    public ActiviteResponse enregistrerFicheSuivi(UUID id, String fiche, User user) {
+        Activite activite = activite(id);
+        verifierRenseignement(activite, user);
+        activite.setFicheSuivi(fiche == null || fiche.isBlank() ? null : fiche.trim());
+        return toResponse(activiteRepository.save(activite));
+    }
+
+    /** L'activité a eu lieu. */
+    public ActiviteResponse marquerRealisee(UUID id, User user) {
+        Activite activite = activite(id);
+        verifierRenseignement(activite, user);
+        if (activite.getStatut() == StatutActivite.ANNULEE) {
+            throw new BusinessException("Une activité annulée ne peut pas être réalisée");
+        }
+        activite.setStatut(StatutActivite.REALISEE);
+        activite.setTauxAvancement(100);
+        if (activite.getDateReelFin() == null) {
+            activite.setDateReelFin(LocalDate.now());
+        }
+        return toResponse(activiteRepository.save(activite));
+    }
+
+    /** Participants comptés dans la liste de présence (seule source de ces nombres). */
+    public void appliquerListePresence(Activite activite, ListePresence.Comptage comptage) {
+        activite.setParticipants(comptage.participants());
+        activite.setParticipantsFemmes(comptage.femmes());
+        activiteRepository.save(activite);
+    }
+
+    public Activite activiteExistante(UUID id) {
+        return activite(id);
     }
 
     /** Suppression au montage seulement. */
@@ -120,11 +213,9 @@ public class ActiviteService {
                     .filter(pe -> !Boolean.TRUE.equals(pe.getIsDeleted()) && pe.getProjetId().equals(projet.getId()))
                     .orElseThrow(() -> new BusinessException("Ce périmètre n'appartient pas au projet"));
         }
-        verifierParticipants(r.participants(), r.participantsFemmes());
         a.setType(r.type() != null ? r.type() : TypeActivite.ACTIVITE);
         a.setPerimetreId(r.perimetreId());
-        a.setParticipants(r.participants());
-        a.setParticipantsFemmes(r.participantsFemmes());
+        a.setLieu(r.lieu() == null || r.lieu().isBlank() ? null : r.lieu().trim());
         a.setTitre(r.titre().trim());
         a.setDescription(r.description());
         a.setResultatId(r.resultatId());
@@ -144,31 +235,6 @@ public class ActiviteService {
                 .sorted(Comparator.comparing(Activite::getDatePrevuDebut))
                 .map(this::toResponse)
                 .toList();
-    }
-
-    /**
-     * Participants réellement présents (une formation surtout). Le responsable de l'activité,
-     * le chef de projet ou le RP les saisissent, à tout moment.
-     */
-    public ActiviteResponse enregistrerParticipants(UUID id, Integer participants, Integer femmes, User user) {
-        Activite activite = activite(id);
-        Projet projet = projet(activite.getProjetId());
-        if (!user.getId().equals(activite.getResponsableId()) && !droits.estGestionnaire(projet, user)) {
-            throw new AccessDeniedException("Seuls le responsable de l'activité, le chef de projet et le RP saisissent les participants");
-        }
-        verifierParticipants(participants, femmes);
-        activite.setParticipants(participants);
-        activite.setParticipantsFemmes(femmes);
-        return toResponse(activiteRepository.save(activite));
-    }
-
-    private static void verifierParticipants(Integer participants, Integer femmes) {
-        if ((participants != null && participants < 0) || (femmes != null && femmes < 0)) {
-            throw new BusinessException("Le nombre de participants ne peut pas être négatif");
-        }
-        if (femmes != null && (participants == null || femmes > participants)) {
-            throw new BusinessException("Le nombre de femmes ne peut pas dépasser le nombre de participants");
-        }
     }
 
     /**
@@ -230,7 +296,7 @@ public class ActiviteService {
                 .orElseThrow(() -> new ResourceNotFoundException("Projet introuvable : " + id));
     }
 
-    private ActiviteResponse toResponse(Activite a) {
+    public ActiviteResponse toResponse(Activite a) {
         return new ActiviteResponse(
                 a.getId(),
                 a.getProjetId(),
@@ -254,6 +320,12 @@ public class ActiviteService {
                 a.getPerimetreId() == null ? null : perimetreRepository.findById(a.getPerimetreId())
                         .map(Perimetre::getNom).orElse(null),
                 a.getParticipants(),
-                a.getParticipantsFemmes());
+                a.getParticipantsFemmes(),
+                a.getLieu(),
+                a.getFicheSuivi(),
+                a.getId() == null ? null : pieceRepository
+                        .findByActiviteIdAndTypeAndIsDeletedFalse(a.getId(), TypePiece.LISTE_PRESENCE).stream()
+                        .findFirst().map(p -> p.getNom()).orElse(null),
+                a.getId() == null ? 0 : pieceRepository.countByActiviteIdAndTypeAndIsDeletedFalse(a.getId(), TypePiece.PHOTO));
     }
 }
