@@ -50,7 +50,7 @@ import ong.fodde.modules.rh.repository.EmployeRepository;
 import ong.fodde.shared.exception.BusinessException;
 import ong.fodde.shared.securite.AccesPersonnel;
 
-/** Espace superviseur : visa des achats de terrain, planning et rapport mensuels, équipe. */
+/** Espace superviseur : planning et rapport mensuels, équipe ; visa des achats par le coordonnateur. */
 class EspaceSuperviseurTest {
 
     private final PerimetreRepository perimetres = mock(PerimetreRepository.class);
@@ -68,6 +68,7 @@ class EspaceSuperviseurTest {
     private User technicien;
     private User superviseur;
     private User autre;
+    private User coordonnateur;
     private Perimetre perimetre;
     private final UUID projetId = UUID.randomUUID();
     private final String moisCourant = YearMonth.now().toString();
@@ -77,6 +78,7 @@ class EspaceSuperviseurTest {
         technicien = compte("Mballo");
         superviseur = compte("Diallo");
         autre = compte("Sow");
+        coordonnateur = compte("Badji");
         perimetre = new Perimetre();
         perimetre.setId(UUID.randomUUID());
         perimetre.setProjetId(projetId);
@@ -89,6 +91,8 @@ class EspaceSuperviseurTest {
         Projet projet = new Projet();
         projet.setId(projetId);
         projet.setCode("PROJ-2026-002");
+        projet.setChefProjetId(coordonnateur.getId());
+        when(projets.findByChefProjetId(coordonnateur.getId())).thenReturn(List.of(projet));
         when(projets.findById(projetId)).thenReturn(Optional.of(projet));
         when(acquisitions.save(any())).thenAnswer(i -> {
             Acquisition a = i.getArgument(0);
@@ -129,25 +133,48 @@ class EspaceSuperviseurTest {
     // Achats
 
     @Test
-    void lAchatDuTechnicienAttendLeVisaDuSuperviseur() {
-        assertEquals(StatutAcquisition.ATTENTE_SUPERVISEUR, achatPar(technicien).statut());
+    void lAchatDuTechnicienAttendLeVisaDuCoordonnateur() {
+        AcquisitionResponse achat = achatPar(technicien);
+        assertEquals(StatutAcquisition.ATTENTE_COORDONNATEUR, achat.statut());
+        assertEquals(coordonnateur.getId(), achat.coordonnateurId());
     }
 
     @Test
-    void lAchatDemandeParLeSuperviseurVaDirectementAuRaf() {
-        assertEquals(StatutAcquisition.EN_ATTENTE, achatPar(superviseur).statut());
+    void lAchatDuSuperviseurPasseAussiParLeCoordonnateur() {
+        assertEquals(StatutAcquisition.ATTENTE_COORDONNATEUR, achatPar(superviseur).statut());
     }
 
     @Test
-    void leVisaDuSuperviseurEnvoieLAchatAuRaf() {
+    void lAchatDemandeParLeCoordonnateurVaDirectementAuRaf() {
+        assertEquals(StatutAcquisition.EN_ATTENTE, achatPar(coordonnateur).statut());
+    }
+
+    @Test
+    void sansCoordonnateurLAchatVaDirectementAuRaf() {
+        projets.findById(projetId).orElseThrow().setChefProjetId(null);
+        assertEquals(StatutAcquisition.EN_ATTENTE, achatPar(technicien).statut());
+    }
+
+    @Test
+    void leVisaDuCoordonnateurEnvoieLAchatAuRaf() {
         UUID id = achatPar(technicien).id();
-        assertEquals(StatutAcquisition.EN_ATTENTE, acquisitionService.viser(id, superviseur).statut());
+        assertEquals(StatutAcquisition.EN_ATTENTE, acquisitionService.viser(id, coordonnateur).statut());
     }
 
     @Test
-    void unAutreCompteNePeutPasViser() {
+    void leSuperviseurNePeutPlusViser() {
         UUID id = achatPar(technicien).id();
+        assertThrows(AccessDeniedException.class, () -> acquisitionService.viser(id, superviseur));
         assertThrows(AccessDeniedException.class, () -> acquisitionService.viser(id, autre));
+    }
+
+    @Test
+    void leCoordonnateurVoitLesAchatsDeSesProjets() {
+        AcquisitionResponse achat = achatPar(technicien);
+        Acquisition enregistree = acquisitions.findById(achat.id()).orElseThrow();
+        when(acquisitions.findByProjetIdIn(anyCollection())).thenReturn(List.of(enregistree));
+        assertEquals(1, acquisitionService.achatsDeMesProjets(coordonnateur).size());
+        assertEquals(0, acquisitionService.achatsDeMesProjets(superviseur).size());
     }
 
     @Test
@@ -157,11 +184,11 @@ class EspaceSuperviseurTest {
     }
 
     @Test
-    void leRejetDuSuperviseurExigeUnMotif() {
+    void leRejetDuCoordonnateurExigeUnMotif() {
         UUID id = achatPar(technicien).id();
-        assertThrows(BusinessException.class, () -> acquisitionService.rejeterParSuperviseur(id, " ", superviseur));
+        assertThrows(BusinessException.class, () -> acquisitionService.rejeterParCoordonnateur(id, " ", coordonnateur));
         assertEquals(StatutAcquisition.REJETEE,
-                acquisitionService.rejeterParSuperviseur(id, "Déjà en stock", superviseur).statut());
+                acquisitionService.rejeterParCoordonnateur(id, "Déjà en stock", coordonnateur).statut());
     }
 
     // Planning et rapport

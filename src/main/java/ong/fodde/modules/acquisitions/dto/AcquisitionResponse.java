@@ -24,5 +24,6 @@ public record AcquisitionResponse(
     String motifRejet,
     LocalDateTime createdAt,
     UUID perimetreId,
-    String perimetreNom
+    String perimetreNom,
+    UUID coordonnateurId // chef du projet, qui vise l'achat avant le RAF
 ) {}
