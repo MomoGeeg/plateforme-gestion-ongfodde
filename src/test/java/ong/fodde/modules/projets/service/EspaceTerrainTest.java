@@ -37,7 +37,7 @@ import ong.fodde.modules.rh.repository.EmployeRepository;
 import ong.fodde.shared.exception.BusinessException;
 import ong.fodde.shared.securite.AccesPersonnel;
 
-/** Espace terrain : activités du technicien et du superviseur, achat pour un périmètre. */
+/** Espace terrain : activités du technicien et du superviseur ; achat pour un périmètre par le coordonnateur. */
 class EspaceTerrainTest {
 
     private final ActiviteRepository activites = mock(ActiviteRepository.class);
@@ -53,6 +53,7 @@ class EspaceTerrainTest {
 
     private User technicien;
     private User superviseur;
+    private User coordonnateur;
     private Perimetre perimetre;
     private final UUID projetId = UUID.randomUUID();
 
@@ -60,6 +61,7 @@ class EspaceTerrainTest {
     void preparer() {
         technicien = compte();
         superviseur = compte();
+        coordonnateur = compte();
         perimetre = new Perimetre();
         perimetre.setId(UUID.randomUUID());
         perimetre.setProjetId(projetId);
@@ -72,6 +74,7 @@ class EspaceTerrainTest {
         Projet projet = new Projet();
         projet.setId(projetId);
         projet.setCode("PROJ-2026-002");
+        projet.setChefProjetId(coordonnateur.getId());
         when(projets.findById(projetId)).thenReturn(Optional.of(projet));
         when(acquisitions.save(any())).thenAnswer(i -> {
             Acquisition a = i.getArgument(0);
@@ -129,7 +132,7 @@ class EspaceTerrainTest {
 
     @Test
     void unAchatPourUnPerimetreRecoitLeProjetDuPerimetre() {
-        AcquisitionResponse r = acquisitionService.creerAcquisition(achat(null, perimetre.getId()), technicien.getId());
+        AcquisitionResponse r = acquisitionService.creerAcquisition(achat(null, perimetre.getId()), coordonnateur);
         assertEquals(projetId, r.projetId());
         assertEquals(perimetre.getId(), r.perimetreId());
         assertEquals("Périmètre de Saré Yoba", r.perimetreNom());
@@ -138,18 +141,18 @@ class EspaceTerrainTest {
     @Test
     void unAchatSansProjetNiPerimetreEstRefuse() {
         assertThrows(BusinessException.class,
-                () -> acquisitionService.creerAcquisition(achat(null, null), technicien.getId()));
+                () -> acquisitionService.creerAcquisition(achat(null, null), coordonnateur));
     }
 
     @Test
     void unPerimetreDUnAutreProjetEstRefuse() {
         assertThrows(BusinessException.class,
-                () -> acquisitionService.creerAcquisition(achat(UUID.randomUUID(), perimetre.getId()), technicien.getId()));
+                () -> acquisitionService.creerAcquisition(achat(UUID.randomUUID(), perimetre.getId()), coordonnateur));
     }
 
     @Test
     void unAchatClassiquePourUnProjetResteAccepte() {
-        AcquisitionResponse r = acquisitionService.creerAcquisition(achat(projetId, null), technicien.getId());
+        AcquisitionResponse r = acquisitionService.creerAcquisition(achat(projetId, null), coordonnateur);
         assertEquals(projetId, r.projetId());
         assertEquals(null, r.perimetreId());
     }

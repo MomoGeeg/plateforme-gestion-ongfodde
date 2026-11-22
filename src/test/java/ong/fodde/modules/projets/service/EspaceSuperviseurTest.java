@@ -50,7 +50,7 @@ import ong.fodde.modules.rh.repository.EmployeRepository;
 import ong.fodde.shared.exception.BusinessException;
 import ong.fodde.shared.securite.AccesPersonnel;
 
-/** Espace superviseur : planning et rapport mensuels, équipe ; visa des achats par le coordonnateur. */
+/** Espace superviseur : planning et rapport mensuels, équipe ; achats lancés par le coordonnateur. */
 class EspaceSuperviseurTest {
 
     private final PerimetreRepository perimetres = mock(PerimetreRepository.class);
@@ -92,7 +92,6 @@ class EspaceSuperviseurTest {
         projet.setId(projetId);
         projet.setCode("PROJ-2026-002");
         projet.setChefProjetId(coordonnateur.getId());
-        when(projets.findByChefProjetId(coordonnateur.getId())).thenReturn(List.of(projet));
         when(projets.findById(projetId)).thenReturn(Optional.of(projet));
         when(acquisitions.save(any())).thenAnswer(i -> {
             Acquisition a = i.getArgument(0);
@@ -127,68 +126,55 @@ class EspaceSuperviseurTest {
     private AcquisitionResponse achatPar(User demandeur) {
         return acquisitionService.creerAcquisition(new AcquisitionRequest("Arrosoirs", "Pour le périmètre",
                 CategorieAcquisition.MATERIEL_AGRICOLE, null, new BigDecimal("75000"), LocalDate.of(2026, 12, 1),
-                null, perimetre.getId()), demandeur.getId());
+                null, perimetre.getId()), demandeur);
     }
 
     // Achats
 
     @Test
-    void lAchatDuTechnicienAttendLeVisaDuCoordonnateur() {
-        AcquisitionResponse achat = achatPar(technicien);
-        assertEquals(StatutAcquisition.ATTENTE_COORDONNATEUR, achat.statut());
-        assertEquals(coordonnateur.getId(), achat.coordonnateurId());
+    void leTechnicienEtLeSuperviseurNeLancentPasDAchat() {
+        assertThrows(AccessDeniedException.class, () -> achatPar(technicien));
+        assertThrows(AccessDeniedException.class, () -> achatPar(superviseur));
     }
 
     @Test
-    void lAchatDuSuperviseurPasseAussiParLeCoordonnateur() {
-        assertEquals(StatutAcquisition.ATTENTE_COORDONNATEUR, achatPar(superviseur).statut());
-    }
-
-    @Test
-    void lAchatDemandeParLeCoordonnateurVaDirectementAuRaf() {
+    void lAchatDuCoordonnateurVaAuRaf() {
         assertEquals(StatutAcquisition.EN_ATTENTE, achatPar(coordonnateur).statut());
     }
 
     @Test
-    void sansCoordonnateurLAchatVaDirectementAuRaf() {
+    void sansChefDeProjetPersonneNeLanceDAchat() {
         projets.findById(projetId).orElseThrow().setChefProjetId(null);
-        assertEquals(StatutAcquisition.EN_ATTENTE, achatPar(technicien).statut());
+        assertThrows(AccessDeniedException.class, () -> achatPar(coordonnateur));
     }
 
     @Test
-    void leVisaDuCoordonnateurEnvoieLAchatAuRaf() {
-        UUID id = achatPar(technicien).id();
-        assertEquals(StatutAcquisition.EN_ATTENTE, acquisitionService.viser(id, coordonnateur).statut());
+    void leRafValideDirectement() {
+        UUID id = achatPar(coordonnateur).id();
+        assertEquals(StatutAcquisition.VALIDEE, acquisitionService.validerAcquisition(id, autre.getId()).statut());
     }
 
     @Test
-    void leSuperviseurNePeutPlusViser() {
-        UUID id = achatPar(technicien).id();
-        assertThrows(AccessDeniedException.class, () -> acquisitionService.viser(id, superviseur));
-        assertThrows(AccessDeniedException.class, () -> acquisitionService.viser(id, autre));
-    }
-
-    @Test
-    void leCoordonnateurVoitLesAchatsDeSesProjets() {
-        AcquisitionResponse achat = achatPar(technicien);
-        Acquisition enregistree = acquisitions.findById(achat.id()).orElseThrow();
-        when(acquisitions.findByProjetIdIn(anyCollection())).thenReturn(List.of(enregistree));
-        assertEquals(1, acquisitionService.achatsDeMesProjets(coordonnateur).size());
-        assertEquals(0, acquisitionService.achatsDeMesProjets(superviseur).size());
-    }
-
-    @Test
-    void leRafNeValidePasUnAchatNonVise() {
-        UUID id = achatPar(technicien).id();
+    void leRafTransmetAuRpQuiValide() {
+        UUID id = achatPar(coordonnateur).id();
+        assertEquals(StatutAcquisition.ATTENTE_RP, acquisitionService.transmettreAuRp(id, autre.getId()).statut());
         assertThrows(BusinessException.class, () -> acquisitionService.validerAcquisition(id, autre.getId()));
+        assertEquals(StatutAcquisition.VALIDEE, acquisitionService.deciderRp(id, true, null, autre.getId()).statut());
     }
 
     @Test
-    void leRejetDuCoordonnateurExigeUnMotif() {
-        UUID id = achatPar(technicien).id();
-        assertThrows(BusinessException.class, () -> acquisitionService.rejeterParCoordonnateur(id, " ", coordonnateur));
+    void leRejetDuRpExigeUnMotif() {
+        UUID id = achatPar(coordonnateur).id();
+        acquisitionService.transmettreAuRp(id, autre.getId());
+        assertThrows(BusinessException.class, () -> acquisitionService.deciderRp(id, false, " ", autre.getId()));
         assertEquals(StatutAcquisition.REJETEE,
-                acquisitionService.rejeterParCoordonnateur(id, "Déjà en stock", coordonnateur).statut());
+                acquisitionService.deciderRp(id, false, "Budget épuisé", autre.getId()).statut());
+    }
+
+    @Test
+    void leRpNeDecidePasUnAchatNonTransmis() {
+        UUID id = achatPar(coordonnateur).id();
+        assertThrows(BusinessException.class, () -> acquisitionService.deciderRp(id, true, null, autre.getId()));
     }
 
     // Planning et rapport
