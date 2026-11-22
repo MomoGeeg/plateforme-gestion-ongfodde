@@ -19,5 +19,4 @@ public interface AcquisitionRepository extends JpaRepository<Acquisition, UUID> 
 
     List<Acquisition> findBySoumisParId(UUID soumisParId);
 
-    List<Acquisition> findByProjetIdIn(Collection<UUID> projetIds);
 }

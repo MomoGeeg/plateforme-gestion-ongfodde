@@ -50,16 +50,15 @@ public class AcquisitionService {
         this.perimetreRepository = perimetreRepository;
     }
 
-    /** Historique de l'acquisition. Visible par le demandeur et par le RAF, le SE et l'administrateur. */
+    /** Historique de l'acquisition. Visible par le demandeur et par le RAF, le RP, le SE et l'administrateur. */
     @Transactional(readOnly = true)
     public List<EtapeHistorique> historique(UUID id, User user) {
         Acquisition a = getOrThrow(id);
-        if (!estCoordonnateurDuProjet(a, user)) {
-            accesPersonnel.verifierUtilisateur(a.getSoumisParId(), user, "ROLE_RAF", "ROLE_SE", "ROLE_ADMIN");
-        }
+        accesPersonnel.verifierUtilisateur(a.getSoumisParId(), user,
+                "ROLE_RAF", "ROLE_RESPONSABLE_PROGRAMMES", "ROLE_SE", "ROLE_ADMIN");
         // Acquisitions traitées avant l'historique : la décision est connue, pas son auteur.
         List<EtapeHistorique> anciennes = a.getStatut() == StatutAcquisition.EN_ATTENTE
-                || a.getStatut() == StatutAcquisition.ATTENTE_COORDONNATEUR
+                || a.getStatut() == StatutAcquisition.ATTENTE_RP
                 ? List.of()
                 : List.of(historiqueService.reconstituer(null, a.getStatut(), null, a.getMotifRejet(), null));
         EtapeHistorique creation = historiqueService.reconstituer(null, StatutAcquisition.EN_ATTENTE,
@@ -67,9 +66,12 @@ public class AcquisitionService {
         return historiqueService.historique(TypeDemande.ACQUISITION, id, creation, anciennes);
     }
 
-    public AcquisitionResponse creerAcquisition(AcquisitionRequest request, UUID soumisParId) {
+    /**
+     * Le matériel de terrain est déployé avant l'arrivée des agents : seul le coordonnateur du projet
+     * (chef de projet) lance un achat, adressé au RAF. L'administrateur garde l'accès.
+     */
+    public AcquisitionResponse creerAcquisition(AcquisitionRequest request, User demandeur) {
         Acquisition acq = new Acquisition();
-        StatutAcquisition statutInitial = StatutAcquisition.EN_ATTENTE;
         acq.setCodeActif(request.codeActif());
         acq.setDesignation(request.designation());
         acq.setJustification(request.justification());
@@ -88,18 +90,21 @@ public class AcquisitionService {
         } else {
             throw new BusinessException("Choisissez le projet ou le périmètre concerné");
         }
-        // Le coordonnateur du projet (chef de projet) vise l'achat avant le RAF, sauf s'il le demande lui-même.
-        UUID coordonnateurId = coordonnateurDuProjet(acq.getProjetId());
-        if (coordonnateurId != null && !coordonnateurId.equals(soumisParId)) {
-            statutInitial = StatutAcquisition.ATTENTE_COORDONNATEUR;
+        UUID coordonnateurId = projetRepository.findById(acq.getProjetId())
+                .orElseThrow(() -> new ResourceNotFoundException("Projet introuvable : " + acq.getProjetId()))
+                .getChefProjetId();
+        if (!demandeur.getId().equals(coordonnateurId) && !accesPersonnel.aUnRole(demandeur, "ROLE_ADMIN")) {
+            throw new org.springframework.security.access.AccessDeniedException(
+                    "Seul le coordonnateur du projet peut lancer un achat");
         }
         acq.setValeur(request.valeur());
         acq.setDateAcquisition(request.dateAcquisition());
-        acq.setSoumisParId(soumisParId);
-        acq.setStatut(statutInitial);
+        acq.setSoumisParId(demandeur.getId());
+        acq.setStatut(StatutAcquisition.EN_ATTENTE);
 
         Acquisition saved = acquisitionRepository.save(acq);
-        historiqueService.enregistrer(TypeDemande.ACQUISITION, saved.getId(), null, statutInitial, soumisParId, null);
+        historiqueService.enregistrer(TypeDemande.ACQUISITION, saved.getId(), null, StatutAcquisition.EN_ATTENTE,
+                demandeur.getId(), null);
         return toResponse(saved);
     }
 
@@ -113,65 +118,37 @@ public class AcquisitionService {
         return toResponses(acquisitionRepository.findBySoumisParId(userId));
     }
 
-    /** Achats demandés pour les projets que coordonne l'utilisateur (chef de projet). */
-    @Transactional(readOnly = true)
-    public List<AcquisitionResponse> achatsDeMesProjets(User user) {
-        List<UUID> projets = projetRepository.findByChefProjetId(user.getId()).stream()
-                .filter(p -> !Boolean.TRUE.equals(p.getIsDeleted()))
-                .map(p -> p.getId()).toList();
-        if (projets.isEmpty()) {
-            return List.of();
-        }
-        return toResponses(acquisitionRepository.findByProjetIdIn(projets).stream()
-                .sorted(java.util.Comparator.comparing(Acquisition::getCreatedAt,
-                        java.util.Comparator.nullsLast(java.util.Comparator.reverseOrder())))
-                .toList());
-    }
-
-    /** Visa du coordonnateur du projet : l'achat part ensuite au RAF. */
-    public AcquisitionResponse viser(UUID id, User user) {
-        Acquisition acq = attenteCoordonnateur(id, user);
-        acq.setStatut(StatutAcquisition.EN_ATTENTE);
-        Acquisition saved = acquisitionRepository.save(acq);
-        historiqueService.enregistrer(TypeDemande.ACQUISITION, id, StatutAcquisition.ATTENTE_COORDONNATEUR,
-                StatutAcquisition.EN_ATTENTE, user.getId(), null);
-        return toResponse(saved);
-    }
-
-    /** Refus du coordonnateur, motif obligatoire. */
-    public AcquisitionResponse rejeterParCoordonnateur(UUID id, String motif, User user) {
-        Acquisition acq = attenteCoordonnateur(id, user);
-        if (motif == null || motif.isBlank()) {
-            throw new BusinessException("Le motif de rejet est obligatoire");
-        }
-        acq.setStatut(StatutAcquisition.REJETEE);
-        acq.setMotifRejet(motif);
-        Acquisition saved = acquisitionRepository.save(acq);
-        historiqueService.enregistrer(TypeDemande.ACQUISITION, id, StatutAcquisition.ATTENTE_COORDONNATEUR,
-                StatutAcquisition.REJETEE, user.getId(), motif);
-        return toResponse(saved);
-    }
-
-    private Acquisition attenteCoordonnateur(UUID id, User user) {
+    /** Le RAF transmet l'achat au responsable des programmes quand il le juge nécessaire. */
+    public AcquisitionResponse transmettreAuRp(UUID id, UUID userId) {
         Acquisition acq = getOrThrow(id);
-        if (!estCoordonnateurDuProjet(acq, user) && !accesPersonnel.aUnRole(user, "ROLE_ADMIN")) {
-            throw new org.springframework.security.access.AccessDeniedException(
-                    "Seul le coordonnateur du projet vise cet achat");
+        if (acq.getStatut() != StatutAcquisition.EN_ATTENTE) {
+            throw new BusinessException("Seul un achat en attente du RAF peut être transmis au RP");
         }
-        if (acq.getStatut() != StatutAcquisition.ATTENTE_COORDONNATEUR) {
-            throw new BusinessException("Cet achat n'attend pas le visa du coordonnateur");
-        }
-        return acq;
+        acq.setStatut(StatutAcquisition.ATTENTE_RP);
+        Acquisition saved = acquisitionRepository.save(acq);
+        historiqueService.enregistrer(TypeDemande.ACQUISITION, id, StatutAcquisition.EN_ATTENTE,
+                StatutAcquisition.ATTENTE_RP, userId, null);
+        return toResponse(saved);
     }
 
-    private UUID coordonnateurDuProjet(UUID projetId) {
-        return projetId == null ? null : projetRepository.findById(projetId)
-                .map(p -> p.getChefProjetId())
-                .orElse(null);
-    }
-
-    private boolean estCoordonnateurDuProjet(Acquisition a, User user) {
-        return user.getId().equals(coordonnateurDuProjet(a.getProjetId()));
+    /** Décision du responsable des programmes sur un achat transmis par le RAF. */
+    public AcquisitionResponse deciderRp(UUID id, boolean valider, String motif, UUID userId) {
+        Acquisition acq = getOrThrow(id);
+        if (acq.getStatut() != StatutAcquisition.ATTENTE_RP) {
+            throw new BusinessException("Cet achat n'attend pas la décision du RP");
+        }
+        StatutAcquisition apres = valider ? StatutAcquisition.VALIDEE : StatutAcquisition.REJETEE;
+        if (!valider) {
+            if (motif == null || motif.isBlank()) {
+                throw new BusinessException("Le motif de rejet est obligatoire");
+            }
+            acq.setMotifRejet(motif);
+        }
+        acq.setStatut(apres);
+        Acquisition saved = acquisitionRepository.save(acq);
+        historiqueService.enregistrer(TypeDemande.ACQUISITION, id, StatutAcquisition.ATTENTE_RP, apres, userId,
+                valider ? null : motif);
+        return toResponse(saved);
     }
 
     /** Conversion d'une liste : projets et auteurs chargés en une requête chacun. */
@@ -213,8 +190,9 @@ public class AcquisitionService {
     }
 
     private AcquisitionResponse toResponse(Acquisition a) {
-        var projet = projetRepository.findById(a.getProjetId());
-        String projetCode = projet.map(p -> p.getCode()).orElse(null);
+        String projetCode = projetRepository.findById(a.getProjetId())
+                .map(p -> p.getCode())
+                .orElse(null);
 
         String soumisPar = a.getSoumisParId() != null
                 ? userRepository.findById(a.getSoumisParId())
@@ -239,8 +217,7 @@ public class AcquisitionService {
                 a.getCreatedAt(),
                 a.getPerimetreId(),
                 a.getPerimetreId() == null ? null : perimetreRepository.findById(a.getPerimetreId())
-                        .map(Perimetre::getNom).orElse(null),
-                projet.map(p -> p.getChefProjetId()).orElse(null)
+                        .map(Perimetre::getNom).orElse(null)
         );
     }
 }

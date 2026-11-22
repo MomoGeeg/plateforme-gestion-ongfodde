@@ -36,7 +36,7 @@ public class AcquisitionController {
 
     /** Toutes les acquisitions ; la logistique en a besoin pour inventorier celles qui sont validées. */
     @GetMapping
-    @PreAuthorize("hasAuthority('ROLE_RAF') or hasAuthority('ROLE_SE') or hasAuthority('ROLE_ADMIN') or hasAuthority('ROLE_RESPONSABLE_LOGISTIQUE')")
+    @PreAuthorize("hasAuthority('ROLE_RAF') or hasAuthority('ROLE_SE') or hasAuthority('ROLE_ADMIN') or hasAuthority('ROLE_RESPONSABLE_LOGISTIQUE') or hasAuthority('ROLE_RESPONSABLE_PROGRAMMES')")
     public ResponseEntity<List<AcquisitionResponse>> listerToutesAcquisitions() {
         return ResponseEntity.ok(acquisitionService.listerToutesAcquisitions());
     }
@@ -46,29 +46,6 @@ public class AcquisitionController {
     @PreAuthorize("isAuthenticated()")
     public ResponseEntity<List<AcquisitionResponse>> mesAcquisitions(@AuthenticationPrincipal User currentUser) {
         return ResponseEntity.ok(acquisitionService.mesAcquisitions(currentUser.getId()));
-    }
-
-    /** Achats des projets que coordonne l'utilisateur connecté (chef de projet). */
-    @GetMapping("/mes-projets")
-    @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<List<AcquisitionResponse>> achatsDeMesProjets(@AuthenticationPrincipal User currentUser) {
-        return ResponseEntity.ok(acquisitionService.achatsDeMesProjets(currentUser));
-    }
-
-    /** Visa du coordonnateur du projet (vérifié par le service). */
-    @PatchMapping("/{id}/viser")
-    @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<AcquisitionResponse> viser(@PathVariable UUID id,
-                                                     @AuthenticationPrincipal User currentUser) {
-        return ResponseEntity.ok(acquisitionService.viser(id, currentUser));
-    }
-
-    @PatchMapping("/{id}/rejeter-coordonnateur")
-    @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<AcquisitionResponse> rejeterParCoordonnateur(@PathVariable UUID id,
-                                                                       @RequestBody Map<String, String> body,
-                                                                       @AuthenticationPrincipal User currentUser) {
-        return ResponseEntity.ok(acquisitionService.rejeterParCoordonnateur(id, body.get("motif"), currentUser));
     }
 
     /** Historique des validations : qui a fait quoi, quand, avec quel motif. */
@@ -84,9 +61,8 @@ public class AcquisitionController {
     public ResponseEntity<AcquisitionResponse> creerAcquisition(
             @Valid @RequestBody AcquisitionRequest request,
             @AuthenticationPrincipal User currentUser) {
-        UUID userId = currentUser.getId(); // jamais l'identifiant envoyé par le navigateur
         return ResponseEntity.status(HttpStatus.CREATED).body(
-                acquisitionService.creerAcquisition(request, userId));
+                acquisitionService.creerAcquisition(request, currentUser));
     }
 
     @PatchMapping("/{id}/valider")
@@ -108,5 +84,28 @@ public class AcquisitionController {
         String motif = body.get("motif");
         UUID userId = currentUser.getId(); // jamais l'identifiant envoyé par le navigateur
         return ResponseEntity.ok(acquisitionService.rejeterAcquisition(id, motif, userId));
+    }
+
+    /** Le RAF transmet l'achat au responsable des programmes. */
+    @PatchMapping("/{id}/transmettre-rp")
+    @PreAuthorize("hasAuthority('ROLE_RAF') or hasAuthority('ROLE_ADMIN')")
+    public ResponseEntity<AcquisitionResponse> transmettreAuRp(@PathVariable UUID id,
+                                                               @AuthenticationPrincipal User currentUser) {
+        return ResponseEntity.ok(acquisitionService.transmettreAuRp(id, currentUser.getId()));
+    }
+
+    @PatchMapping("/{id}/valider-rp")
+    @PreAuthorize("hasAuthority('ROLE_RESPONSABLE_PROGRAMMES') or hasAuthority('ROLE_ADMIN')")
+    public ResponseEntity<AcquisitionResponse> validerParRp(@PathVariable UUID id,
+                                                            @AuthenticationPrincipal User currentUser) {
+        return ResponseEntity.ok(acquisitionService.deciderRp(id, true, null, currentUser.getId()));
+    }
+
+    @PatchMapping("/{id}/rejeter-rp")
+    @PreAuthorize("hasAuthority('ROLE_RESPONSABLE_PROGRAMMES') or hasAuthority('ROLE_ADMIN')")
+    public ResponseEntity<AcquisitionResponse> rejeterParRp(@PathVariable UUID id,
+                                                            @RequestBody Map<String, String> body,
+                                                            @AuthenticationPrincipal User currentUser) {
+        return ResponseEntity.ok(acquisitionService.deciderRp(id, false, body.get("motif"), currentUser.getId()));
     }
 }
