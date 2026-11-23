@@ -13,6 +13,8 @@ public interface PerimetreRepository extends JpaRepository<Perimetre, UUID> {
 
     List<Perimetre> findByProjetIdAndIsDeletedFalseOrderByNomAsc(UUID projetId);
 
+    List<Perimetre> findByIsDeletedFalseOrderByNomAsc();
+
     List<Perimetre> findByTechnicienIdAndIsDeletedFalseOrderByNomAsc(UUID technicienId);
 
     List<Perimetre> findBySuperviseurIdAndIsDeletedFalseOrderByNomAsc(UUID superviseurId);

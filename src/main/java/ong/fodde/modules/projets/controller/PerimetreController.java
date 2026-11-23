@@ -44,6 +44,12 @@ public class PerimetreController {
         return service.mesPerimetres(user);
     }
 
+    /** Carte : tous les périmètres (RP, SE, administrateur ; vérifié par le service). */
+    @GetMapping("/carte")
+    public List<PerimetreResponse> carte(@AuthenticationPrincipal User user) {
+        return service.carte(user);
+    }
+
     @GetMapping("/intervenants")
     public Intervenants intervenants() {
         return service.intervenants();

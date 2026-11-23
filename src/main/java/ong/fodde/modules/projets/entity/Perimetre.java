@@ -45,4 +45,15 @@ public class Perimetre extends BaseEntity {
 
     @Column(name = "superviseur_id", columnDefinition = "uuid")
     private UUID superviseurId;
+
+    /** Coordonnées géographiques (degrés décimaux, WGS 84). */
+    @Column(name = "latitude", precision = 9, scale = 6)
+    private BigDecimal latitude;
+
+    @Column(name = "longitude", precision = 9, scale = 6)
+    private BigDecimal longitude;
+
+    /** Cultures pratiquées, séparées par des virgules (oignon, tomate…). */
+    @Column(name = "cultures", length = 500)
+    private String cultures;
 }

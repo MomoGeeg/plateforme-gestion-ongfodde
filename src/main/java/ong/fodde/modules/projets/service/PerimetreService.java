@@ -141,6 +141,38 @@ public class PerimetreService {
         p.setSuperficieHa(r.superficieHa());
         p.setTechnicienId(verifierRole(r.technicienId(), ROLE_TECHNICIEN, "Le technicien"));
         p.setSuperviseurId(verifierRole(r.superviseurId(), ROLE_SUPERVISEUR, "Le superviseur"));
+        if ((r.latitude() == null) != (r.longitude() == null)) {
+            throw new BusinessException("Indiquez la latitude et la longitude, ou aucune des deux");
+        }
+        if (r.latitude() != null && (r.latitude().abs().compareTo(java.math.BigDecimal.valueOf(90)) > 0
+                || r.longitude().abs().compareTo(java.math.BigDecimal.valueOf(180)) > 0)) {
+            throw new BusinessException("Coordonnées invalides : latitude entre -90 et 90, longitude entre -180 et 180");
+        }
+        p.setLatitude(r.latitude() == null ? null : r.latitude().setScale(6, java.math.RoundingMode.HALF_UP));
+        p.setLongitude(r.longitude() == null ? null : r.longitude().setScale(6, java.math.RoundingMode.HALF_UP));
+        String cultures = r.cultures() == null ? "" : r.cultures().stream()
+                .filter(c -> c != null && !c.isBlank())
+                .map(c -> c.trim().replace(",", " "))
+                .distinct()
+                .collect(java.util.stream.Collectors.joining(", "));
+        if (cultures.length() > 500) {
+            throw new BusinessException("Liste de cultures trop longue");
+        }
+        p.setCultures(cultures.isEmpty() ? null : cultures);
+    }
+
+    /** Tous les périmètres, pour la carte du RP et du SE (et de l'administrateur). */
+    @Transactional(readOnly = true)
+    public List<PerimetreResponse> carte(User user) {
+        if (!droits.aUnRole(user, "ROLE_RESPONSABLE_PROGRAMMES", "ROLE_SE", "ROLE_ADMIN")) {
+            throw new org.springframework.security.access.AccessDeniedException(
+                    "La carte des périmètres est réservée au RP et au SE");
+        }
+        Map<UUID, Projet> projets = new java.util.HashMap<>();
+        return perimetreRepository.findByIsDeletedFalseOrderByNomAsc().stream()
+                .map(p -> toResponse(p, projets.computeIfAbsent(p.getProjetId(),
+                        id -> projetRepository.findById(id).orElse(null))))
+                .toList();
     }
 
     private UUID verifierRole(UUID userId, String role, String qui) {
@@ -185,6 +217,10 @@ public class PerimetreService {
                 p.getNom(), p.getVillage(), p.getCommune(), p.getDepartement(), p.getSuperficieHa(),
                 p.getTechnicienId(), nomDe(p.getTechnicienId()),
                 p.getSuperviseurId(), nomDe(p.getSuperviseurId()),
-                p.getId() == null ? 0 : activiteRepository.countByPerimetreIdAndIsDeletedFalse(p.getId()));
+                p.getId() == null ? 0 : activiteRepository.countByPerimetreIdAndIsDeletedFalse(p.getId()),
+                p.getLatitude(), p.getLongitude(),
+                p.getCultures() == null ? List.of()
+                        : java.util.Arrays.stream(p.getCultures().split(",")).map(String::trim)
+                                .filter(c -> !c.isEmpty()).toList());
     }
 }
