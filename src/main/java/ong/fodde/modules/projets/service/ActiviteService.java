@@ -63,7 +63,8 @@ public class ActiviteService {
 
     public ActiviteResponse creerActivite(ActiviteRequest request, User user) {
         Projet projet = projet(request.projetId());
-        boolean parAnimateur = planifieParAnimateur(projet, user);
+        boolean parAnimateur = planifieParAnimateur(projet, user)
+                || planifieSurSonPerimetre(projet, request.perimetreId(), user);
         if (!parAnimateur) {
             verifierPlanification(projet, user);
         }
@@ -82,9 +83,10 @@ public class ActiviteService {
     public ActiviteResponse modifierActivite(UUID id, ActiviteRequest request, User user) {
         Activite activite = activite(id);
         Projet projet = projet(activite.getProjetId());
-        boolean parAnimateur = planifieParAnimateur(projet, user);
+        boolean parAnimateur = planifieParAnimateur(projet, user)
+                || planifieSurSonPerimetre(projet, request.perimetreId(), user);
         if (parAnimateur && !user.getId().equals(activite.getResponsableId())) {
-            throw new AccessDeniedException("Un animateur ne modifie que ses propres activités");
+            throw new AccessDeniedException("Un agent de terrain ne modifie que ses propres activités");
         }
         if (!parAnimateur) {
             verifierPlanification(projet, user);
@@ -106,6 +108,24 @@ public class ActiviteService {
     private boolean planifieParAnimateur(Projet projet, User user) {
         if (droits.estGestionnaire(projet, user)
                 || !animateurRepository.existsByProjetIdAndAnimateurIdAndIsDeletedFalse(projet.getId(), user.getId())) {
+            return false;
+        }
+        if (projet.getStatut() != StatutProjet.ACTIF) {
+            throw new BusinessException("Les activités se planifient sur un projet actif");
+        }
+        return true;
+    }
+
+    /**
+     * Vrai si le technicien ou le superviseur du périmètre choisi (sans droit de gestion) planifie une
+     * activité sur ce périmètre. Elle lui revient d'office ; le projet doit être actif.
+     */
+    private boolean planifieSurSonPerimetre(Projet projet, UUID perimetreId, User user) {
+        if (perimetreId == null || droits.estGestionnaire(projet, user)
+                || !perimetreRepository.findById(perimetreId)
+                        .filter(p -> !Boolean.TRUE.equals(p.getIsDeleted()) && projet.getId().equals(p.getProjetId()))
+                        .map(p -> user.getId().equals(p.getSuperviseurId())
+                                || user.getId().equals(p.getTechnicienId())).orElse(false)) {
             return false;
         }
         if (projet.getStatut() != StatutProjet.ACTIF) {
@@ -207,6 +227,9 @@ public class ActiviteService {
         if (r.budgetAlloue() != null && r.budgetAlloue().signum() < 0) {
             throw new BusinessException("Le budget de l'activité ne peut pas être négatif");
         }
+        if (r.participantsPrevus() != null && r.participantsPrevus() < 0) {
+            throw new BusinessException("Le nombre de participants ne peut pas être négatif");
+        }
         Perimetre perimetre = null;
         if (r.perimetreId() != null) {
             perimetre = perimetreRepository.findById(r.perimetreId())
@@ -226,6 +249,14 @@ public class ActiviteService {
         a.setDatePrevuDebut(r.datePrevuDebut());
         a.setDatePrevuFin(r.datePrevuFin());
         a.setBudgetAlloue(r.budgetAlloue());
+        a.setCible(texte(r.cible()));
+        a.setParticipantsPrevus(r.participantsPrevus());
+        a.setObjectifs(texte(r.objectifs()));
+        a.setIndicateurs(texte(r.indicateurs()));
+    }
+
+    private static String texte(String s) {
+        return s == null || s.isBlank() ? null : s.trim();
     }
 
     @Transactional(readOnly = true)
@@ -326,6 +357,7 @@ public class ActiviteService {
                 a.getId() == null ? null : pieceRepository
                         .findByActiviteIdAndTypeAndIsDeletedFalse(a.getId(), TypePiece.LISTE_PRESENCE).stream()
                         .findFirst().map(p -> p.getNom()).orElse(null),
-                a.getId() == null ? 0 : pieceRepository.countByActiviteIdAndTypeAndIsDeletedFalse(a.getId(), TypePiece.PHOTO));
+                a.getId() == null ? 0 : pieceRepository.countByActiviteIdAndTypeAndIsDeletedFalse(a.getId(), TypePiece.PHOTO),
+                a.getCible(), a.getParticipantsPrevus(), a.getObjectifs(), a.getIndicateurs());
     }
 }

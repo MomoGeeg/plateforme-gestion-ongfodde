@@ -38,5 +38,25 @@ public record ActiviteRequest(
     UUID perimetreId,
 
     /** Village, quartier, école… Les participants viennent de la liste de présence, pas d'ici. */
-    String lieu
-) {}
+    String lieu,
+
+    /** Public visé. */
+    String cible,
+
+    /** Participants attendus (les présents viennent de la liste de présence). */
+    Integer participantsPrevus,
+
+    /** Objectifs à atteindre. */
+    String objectifs,
+
+    /** Indicateurs de l'activité. */
+    String indicateurs
+) {
+    /** Activité sans les champs de planification détaillée (cible, objectifs…). */
+    public ActiviteRequest(UUID projetId, UUID parentId, UUID resultatId, String titre, String description,
+                           UUID responsableId, LocalDate datePrevuDebut, LocalDate datePrevuFin,
+                           BigDecimal budgetAlloue, TypeActivite type, UUID perimetreId, String lieu) {
+        this(projetId, parentId, resultatId, titre, description, responsableId, datePrevuDebut, datePrevuFin,
+                budgetAlloue, type, perimetreId, lieu, null, null, null, null);
+    }
+}
