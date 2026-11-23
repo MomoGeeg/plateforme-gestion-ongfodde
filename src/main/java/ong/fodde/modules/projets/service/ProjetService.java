@@ -81,6 +81,9 @@ public class ProjetService {
         if (request.chefProjetId() == null) {
             throw new BusinessException("Le chargé de projet est obligatoire");
         }
+        if (request.budgetTotal() == null || request.budgetTotal().signum() <= 0) {
+            throw new BusinessException("Le budget du projet doit être supérieur à 0");
+        }
         String code = request.code() == null || request.code().isBlank() ? prochainCode() : request.code().trim();
         if (projetRepository.existsByCode(code)) {
             throw new BusinessException("Un projet avec le code '" + code + "' existe déjà");
@@ -90,7 +93,7 @@ public class ProjetService {
         projet.setCode(code);
         remplir(projet, request);
         projet.setResponsableId(request.responsableId() != null ? request.responsableId() : auteur.getId());
-        projet.setBudgetTotal(BigDecimal.ZERO);
+        projet.setBudgetTotal(request.budgetTotal());
         projet.setStatut(StatutProjet.BROUILLON);
         verifierCompte(projet.getResponsableId());
         if (request.equipeIds() != null) {
@@ -102,6 +105,15 @@ public class ProjetService {
         Projet saved = projetRepository.save(projet);
         historiqueService.enregistrer(TypeDemande.PROJET, saved.getId(), null, StatutProjet.BROUILLON,
                 auteur.getId(), null);
+        if (request.resultats() != null) {
+            int ordre = 1;
+            for (String libelle : request.resultats()) {
+                if (libelle != null && !libelle.isBlank()) {
+                    montageService.ajouterResultat(saved.getId(),
+                            new ong.fodde.modules.projets.dto.MontageDtos.ResultatRequest(libelle, null, ordre++), auteur);
+                }
+            }
+        }
         return toResponse(saved);
     }
 

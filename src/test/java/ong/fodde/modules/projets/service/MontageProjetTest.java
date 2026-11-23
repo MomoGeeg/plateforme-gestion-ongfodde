@@ -63,7 +63,7 @@ class MontageProjetTest {
     private final FinancementRepository financements = mock(FinancementRepository.class);
 
     private final DroitsProjet droits = new DroitsProjet(new AccesPersonnel(mock(EmployeRepository.class)));
-    private final ProjetMapper mapper = new ProjetMapper(users);
+    private final ProjetMapper mapper = new ProjetMapper(users, mock(ong.fodde.modules.financier.repository.DepenseRepository.class));
     private final ActiviteService activiteService = new ActiviteService(activites, projets, resultats, users,
             mock(ong.fodde.modules.projets.repository.PerimetreRepository.class), mock(ong.fodde.modules.projets.repository.AnimateurProjetRepository.class), mock(ong.fodde.modules.projets.repository.PieceActiviteRepository.class), droits);
     private final MontageProjetService montage = new MontageProjetService(projets,
@@ -139,7 +139,8 @@ class MontageProjetTest {
 
     private ProjetResponse nouveauProjet() {
         return service.creerProjet(new ProjetRequest(null, "Maraîchage à Kolda", null, "Améliorer la sécurité alimentaire",
-                "Kolda", LocalDate.of(2027, 1, 1), LocalDate.of(2028, 12, 31), null, null, cp.getId(), null, "AFD"), rp);
+                "Kolda", LocalDate.of(2027, 1, 1), LocalDate.of(2028, 12, 31), null, null, cp.getId(), null, "AFD",
+                new java.math.BigDecimal("5000000"), null), rp);
     }
 
     /** Résultat, activité, indicateur et budget : un projet prêt à soumettre. */
@@ -173,10 +174,24 @@ class MontageProjetTest {
     void leBailleurEtLeChargeDeProjetSontObligatoires() {
         assertThrows(ong.fodde.shared.exception.BusinessException.class, () -> service.creerProjet(new ProjetRequest(null,
                 "Projet", null, null, null, LocalDate.of(2027, 1, 1), LocalDate.of(2028, 1, 1), null, null,
-                cp.getId(), null, " "), rp));
+                cp.getId(), null, " ", java.math.BigDecimal.TEN, null), rp));
         assertThrows(ong.fodde.shared.exception.BusinessException.class, () -> service.creerProjet(new ProjetRequest(null,
                 "Projet", null, null, null, LocalDate.of(2027, 1, 1), LocalDate.of(2028, 1, 1), null, null,
-                null, null, "AFD"), rp));
+                null, null, "AFD", java.math.BigDecimal.TEN, null), rp));
+        assertThrows(ong.fodde.shared.exception.BusinessException.class, () -> service.creerProjet(new ProjetRequest(null,
+                "Projet", null, null, null, LocalDate.of(2027, 1, 1), LocalDate.of(2028, 1, 1), null, null,
+                cp.getId(), null, "AFD", java.math.BigDecimal.ZERO, null), rp));
+    }
+
+    @Test
+    void leBudgetEstSaisiEtLesResultatsEnregistres() {
+        ProjetResponse p = service.creerProjet(new ProjetRequest(null, "Projet", null, null, null,
+                LocalDate.of(2027, 1, 1), LocalDate.of(2028, 1, 1), null, null, cp.getId(), null, "AFD",
+                new java.math.BigDecimal("5000000"), List.of("Production accrue", " ")), rp);
+        assertEquals(0, new java.math.BigDecimal("5000000").compareTo(p.budgetTotal()));
+        assertEquals(0, new java.math.BigDecimal("5000000").compareTo(p.budgetRestant()));
+        assertEquals(1, lesResultats.size());
+        assertEquals("Production accrue", lesResultats.get(0).getLibelle());
     }
 
     // ── Droits de montage ─────────────────────────────────
@@ -233,7 +248,7 @@ class MontageProjetTest {
         ProjetResponse p = nouveauProjet();
         BusinessException ex = assertThrows(BusinessException.class, () -> service.soumettre(p.id(), rp));
         assertTrue(ex.getMessage().contains("résultat attendu"));
-        assertTrue(ex.getMessage().contains("Budget"));
+        assertTrue(ex.getMessage().contains("indicateur"));
     }
 
     @Test

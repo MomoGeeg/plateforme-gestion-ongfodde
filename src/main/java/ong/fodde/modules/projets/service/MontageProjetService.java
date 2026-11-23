@@ -141,7 +141,7 @@ public class MontageProjetService {
         List<ResultatAttendu> resultats = resultatRepository.findByProjetIdOrderByOrdreAsc(p.getId());
         List<Activite> activites = activiteRepository.findByProjetId(p.getId());
         List<Indicateur> indicateurs = indicateurs(p.getId());
-        BigDecimal budget = total(p.getId());
+        BigDecimal budget = p.getBudgetTotal() != null ? p.getBudgetTotal() : BigDecimal.ZERO;
         Set<UUID> resultatsAvecActivite = activites.stream().map(Activite::getResultatId)
                 .filter(id -> id != null).collect(Collectors.toSet());
         boolean datesOk = activites.stream().allMatch(a ->
@@ -158,7 +158,7 @@ public class MontageProjetService {
                 !resultats.isEmpty() && resultats.stream().allMatch(r -> resultatsAvecActivite.contains(r.getId())), true));
         c.add(new Controle("Au moins un indicateur", !indicateurs.isEmpty(), true));
         c.add(new Controle("Activités comprises dans les dates du projet", datesOk, true));
-        c.add(new Controle("Budget prévisionnel saisi", budget.signum() > 0, true));
+        c.add(new Controle("Budget du projet renseigné", budget.signum() > 0, true));
         c.add(new Controle("Budget couvert par les conventions des bailleurs",
                 budget.signum() > 0 && financements.compareTo(budget) >= 0, false));
         return c;
@@ -276,8 +276,6 @@ public class MontageProjetService {
         budgetRepository.deleteByProjetId(projetId);
         budgetRepository.flush();
         List<LigneBudgetProjet> enregistrees = budgetRepository.saveAll(lignes);
-        p.setBudgetTotal(enregistrees.stream().map(LigneBudgetProjet::getMontant).reduce(BigDecimal.ZERO, BigDecimal::add));
-        projetRepository.save(p);
         return enregistrees.stream()
                 .map(l -> new LigneBudgetResponse(l.getId(), l.getCode(), l.getIntitule(), l.getCategorie(),
                         l.getMontant(), l.getFinancementId()))
@@ -314,11 +312,6 @@ public class MontageProjetService {
         return indicateurRepository.findByProjetId(projetId).stream()
                 .filter(i -> !Boolean.TRUE.equals(i.getIsDeleted()))
                 .toList();
-    }
-
-    private BigDecimal total(UUID projetId) {
-        return budgetRepository.findByProjetIdOrderByOrdreAsc(projetId).stream()
-                .map(LigneBudgetProjet::getMontant).reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
     private static boolean estRempli(String s) {
