@@ -69,8 +69,9 @@ class MontageProjetTest {
     private final MontageProjetService montage = new MontageProjetService(projets,
             mock(ObjectifSpecifiqueRepository.class), resultats, activites, indicateurs, budget, financements,
             mock(BailleurRepository.class), activiteService, droits, mapper);
+    private final BailleurRepository bailleurs = mock(BailleurRepository.class);
     private final ProjetService service = new ProjetService(projets, users, montage, mock(HistoriqueService.class),
-            droits, mapper);
+            droits, mapper, bailleurs);
 
     private final List<ResultatAttendu> lesResultats = new ArrayList<>();
     private final List<Activite> lesActivites = new ArrayList<>();
@@ -84,6 +85,7 @@ class MontageProjetTest {
     void preparer() {
         rp = compte("ROLE_RESPONSABLE_PROGRAMMES");
         cp = compte("ROLE_CHARGE_PROGRAMME");
+        when(bailleurs.save(any())).thenAnswer(i -> i.getArgument(0));
         when(projets.save(any())).thenAnswer(i -> {
             Projet p = i.getArgument(0);
             if (p.getId() == null) {
@@ -137,7 +139,7 @@ class MontageProjetTest {
 
     private ProjetResponse nouveauProjet() {
         return service.creerProjet(new ProjetRequest(null, "Maraîchage à Kolda", null, "Améliorer la sécurité alimentaire",
-                "Kolda", LocalDate.of(2027, 1, 1), LocalDate.of(2028, 12, 31), null, null, cp.getId(), null), rp);
+                "Kolda", LocalDate.of(2027, 1, 1), LocalDate.of(2028, 12, 31), null, null, cp.getId(), null, "AFD"), rp);
     }
 
     /** Résultat, activité, indicateur et budget : un projet prêt à soumettre. */
@@ -164,6 +166,17 @@ class MontageProjetTest {
         assertEquals(StatutProjet.BROUILLON, p.statut());
         assertEquals(rp.getId(), p.responsableId());
         assertTrue(projets.findById(p.id()).orElseThrow().getEquipe().contains(cp));
+        assertEquals("AFD", p.bailleur());
+    }
+
+    @Test
+    void leBailleurEtLeChargeDeProjetSontObligatoires() {
+        assertThrows(ong.fodde.shared.exception.BusinessException.class, () -> service.creerProjet(new ProjetRequest(null,
+                "Projet", null, null, null, LocalDate.of(2027, 1, 1), LocalDate.of(2028, 1, 1), null, null,
+                cp.getId(), null, " "), rp));
+        assertThrows(ong.fodde.shared.exception.BusinessException.class, () -> service.creerProjet(new ProjetRequest(null,
+                "Projet", null, null, null, LocalDate.of(2027, 1, 1), LocalDate.of(2028, 1, 1), null, null,
+                null, null, "AFD"), rp));
     }
 
     // ── Droits de montage ─────────────────────────────────

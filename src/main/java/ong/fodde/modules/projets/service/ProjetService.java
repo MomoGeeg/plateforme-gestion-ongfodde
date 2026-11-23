@@ -25,6 +25,8 @@ import ong.fodde.modules.projets.dto.ProjetResponse;
 import ong.fodde.modules.projets.entity.Devise;
 import ong.fodde.modules.projets.entity.Projet;
 import ong.fodde.modules.projets.entity.StatutProjet;
+import ong.fodde.modules.projets.entity.Bailleur;
+import ong.fodde.modules.projets.repository.BailleurRepository;
 import ong.fodde.modules.projets.repository.ProjetRepository;
 import ong.fodde.shared.exception.BusinessException;
 import ong.fodde.shared.exception.ResourceNotFoundException;
@@ -53,11 +55,13 @@ public class ProjetService {
     private final HistoriqueService historiqueService;
     private final DroitsProjet droits;
     private final ProjetMapper mapper;
+    private final BailleurRepository bailleurRepository;
 
     public ProjetService(ProjetRepository projetRepository, UserRepository userRepository,
                          MontageProjetService montageService, HistoriqueService historiqueService,
-                         DroitsProjet droits, ProjetMapper mapper) {
+                         DroitsProjet droits, ProjetMapper mapper, BailleurRepository bailleurRepository) {
         this.mapper = mapper;
+        this.bailleurRepository = bailleurRepository;
         this.projetRepository = projetRepository;
         this.userRepository = userRepository;
         this.montageService = montageService;
@@ -71,6 +75,12 @@ public class ProjetService {
 
     public ProjetResponse creerProjet(ProjetRequest request, User auteur) {
         verifierDates(request.dateDebut(), request.dateFin());
+        if (request.bailleur() == null || request.bailleur().isBlank()) {
+            throw new BusinessException("Le bailleur est obligatoire");
+        }
+        if (request.chefProjetId() == null) {
+            throw new BusinessException("Le chargé de projet est obligatoire");
+        }
         String code = request.code() == null || request.code().isBlank() ? prochainCode() : request.code().trim();
         if (projetRepository.existsByCode(code)) {
             throw new BusinessException("Un projet avec le code '" + code + "' existe déjà");
@@ -87,6 +97,7 @@ public class ProjetService {
             request.equipeIds().forEach(id -> projet.getEquipe().add(compte(id)));
         }
         ajouterChefAEquipe(projet);
+        definirBailleur(projet, request.bailleur());
 
         Projet saved = projetRepository.save(projet);
         historiqueService.enregistrer(TypeDemande.PROJET, saved.getId(), null, StatutProjet.BROUILLON,
@@ -105,7 +116,22 @@ public class ProjetService {
             projet.setResponsableId(request.responsableId());
         }
         ajouterChefAEquipe(projet);
+        if (request.bailleur() != null && !request.bailleur().isBlank()) {
+            definirBailleur(projet, request.bailleur());
+        }
         return toResponse(projetRepository.save(projet));
+    }
+
+    /** Bailleur du projet, retrouvé par son nom ou enregistré s'il est nouveau. */
+    private void definirBailleur(Projet projet, String nom) {
+        String n = nom.trim();
+        Bailleur b = bailleurRepository.findByNom(n).orElseGet(() -> {
+            Bailleur nouveau = new Bailleur();
+            nouveau.setNom(n);
+            return bailleurRepository.save(nouveau);
+        });
+        projet.getBailleurs().clear();
+        projet.getBailleurs().add(b);
     }
 
     private void remplir(Projet projet, ProjetRequest request) {

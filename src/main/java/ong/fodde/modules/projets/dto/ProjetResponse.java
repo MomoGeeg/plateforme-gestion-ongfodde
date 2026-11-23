@@ -25,5 +25,7 @@ public record ProjetResponse(
     String responsableNom,
     UUID chefProjetId,
     String chefProjetNom,
-    String motifRenvoi
+    String motifRenvoi,
+    /** Bailleur(s) de fonds, séparés par une virgule. */
+    String bailleur
 ) {}

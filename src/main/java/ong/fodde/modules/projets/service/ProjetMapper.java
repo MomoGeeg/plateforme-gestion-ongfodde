@@ -41,7 +41,9 @@ public class ProjetMapper {
             nom(p.getResponsableId()),
             p.getChefProjetId(),
             nom(p.getChefProjetId()),
-            p.getMotifRenvoi()
+            p.getMotifRenvoi(),
+            p.getBailleurs().isEmpty() ? null
+                    : p.getBailleurs().stream().map(b -> b.getNom()).sorted().collect(java.util.stream.Collectors.joining(", "))
         );
     }
 }
