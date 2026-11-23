@@ -34,6 +34,10 @@ public record ActiviteResponse(
         String ficheSuivi,
         /** Nom du fichier de la liste de présence, null s'il n'y en a pas. */
         String listePresence,
-        long nbPhotos
+        long nbPhotos,
+        String cible,
+        Integer participantsPrevus,
+        String objectifs,
+        String indicateurs
 ) {
 }

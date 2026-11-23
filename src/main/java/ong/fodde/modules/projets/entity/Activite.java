@@ -84,4 +84,18 @@ public class Activite extends BaseEntity {
     /** Résultats, difficultés et recommandations, rédigés après l'activité. */
     @Column(name = "fiche_suivi", columnDefinition = "text")
     private String ficheSuivi;
+
+    /** Planification : public visé (femmes du groupement, élèves, relais…). */
+    @Column(name = "cible", length = 300)
+    private String cible;
+
+    /** Planification : participants attendus ; les présents viennent de la liste de présence. */
+    @Column(name = "participants_prevus")
+    private Integer participantsPrevus;
+
+    @Column(name = "objectifs", columnDefinition = "text")
+    private String objectifs;
+
+    @Column(name = "indicateurs", columnDefinition = "text")
+    private String indicateurs;
 }

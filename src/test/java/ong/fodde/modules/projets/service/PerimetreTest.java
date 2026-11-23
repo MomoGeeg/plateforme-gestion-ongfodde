@@ -238,6 +238,54 @@ class PerimetreTest {
         assertEquals(technicien.getId(), a.responsableId());
     }
 
+    private ActiviteRequest planification(UUID perimetreId) {
+        return new ActiviteRequest(projet.getId(), null, null, "Formation sur le compost", "Deux séances", null,
+                LocalDate.of(2026, 12, 1), LocalDate.of(2026, 12, 2), null, TypeActivite.FORMATION, perimetreId,
+                "Saré Yoba", "Femmes du groupement", 30, "Maîtriser le bocashi", "Nombre de femmes formées");
+    }
+
+    @Test
+    void leSuperviseurPlanifieUneActiviteSurSonPerimetre() {
+        PerimetreResponse p = service.creer(demande(technicien.getId(), superviseur.getId()), chef);
+        ActiviteResponse a = activiteService.creerActivite(planification(p.id()), superviseur);
+        assertEquals(superviseur.getId(), a.responsableId());
+        assertEquals("Femmes du groupement", a.cible());
+        assertEquals(30, a.participantsPrevus());
+        assertEquals("Maîtriser le bocashi", a.objectifs());
+        assertEquals("Nombre de femmes formées", a.indicateurs());
+        assertNull(a.participants());
+    }
+
+    @Test
+    void leTechnicienPlanifieAussiSurSonPerimetre() {
+        PerimetreResponse p = service.creer(demande(technicien.getId(), superviseur.getId()), chef);
+        ActiviteResponse a = activiteService.creerActivite(planification(p.id()), technicien);
+        assertEquals(technicien.getId(), a.responsableId());
+        assertEquals(30, a.participantsPrevus());
+    }
+
+    @Test
+    void leSuperviseurNePlanifiePasSansPerimetreNiSurCeluiDUnAutre() {
+        PerimetreResponse p = service.creer(demande(technicien.getId(), null), chef);
+        assertThrows(AccessDeniedException.class, () -> activiteService.creerActivite(planification(p.id()), superviseur));
+        assertThrows(AccessDeniedException.class, () -> activiteService.creerActivite(planification(null), superviseur));
+    }
+
+    @Test
+    void leSuperviseurNeModifiePasUneActiviteDuChef() {
+        PerimetreResponse p = service.creer(demande(technicien.getId(), superviseur.getId()), chef);
+        ActiviteResponse a = activiteService.creerActivite(planification(p.id()), chef);
+        assertThrows(AccessDeniedException.class,
+                () -> activiteService.modifierActivite(a.id(), planification(p.id()), superviseur));
+    }
+
+    @Test
+    void unNombreDeParticipantsNegatifEstRefuse() {
+        ActiviteRequest r = new ActiviteRequest(projet.getId(), null, null, "X", null, null,
+                LocalDate.of(2026, 12, 1), LocalDate.of(2026, 12, 2), null, null, null, null, null, -1, null, null);
+        assertThrows(BusinessException.class, () -> activiteService.creerActivite(r, chef));
+    }
+
     @Test
     void uneActiviteSansTypeEstUneActiviteOrdinaire() {
         ActiviteRequest r = new ActiviteRequest(projet.getId(), null, null, "Piquetage", null, null,
