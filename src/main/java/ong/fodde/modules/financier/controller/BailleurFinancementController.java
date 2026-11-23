@@ -28,6 +28,10 @@ public class BailleurFinancementController {
     private static final String LECTURE =
         "hasAuthority('ROLE_RAF') or hasAuthority('ROLE_SE') or hasAuthority('ROLE_ADMIN')"
         + " or hasAuthority('ROLE_COMPTABLE') or hasAuthority('ROLE_RESPONSABLE_PROGRAMMES')";
+    /** Les bailleurs sont enregistrés par le responsable des programmes. */
+    private static final String GESTION_BAILLEURS =
+        "hasAuthority('ROLE_RESPONSABLE_PROGRAMMES') or hasAuthority('ROLE_SE') or hasAuthority('ROLE_ADMIN')";
+    /** Les conventions de financement restent au RAF. */
     private static final String GESTION =
         "hasAuthority('ROLE_RAF') or hasAuthority('ROLE_SE') or hasAuthority('ROLE_ADMIN')";
 
@@ -44,7 +48,7 @@ public class BailleurFinancementController {
     }
 
     @PostMapping("/api/bailleurs")
-    @PreAuthorize(GESTION)
+    @PreAuthorize(GESTION_BAILLEURS)
     public ResponseEntity<BailleurResponse> creerBailleur(@Valid @RequestBody BailleurRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(service.creerBailleur(request));
     }
