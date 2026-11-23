@@ -18,6 +18,9 @@ public interface DepenseRepository extends JpaRepository<Depense, UUID> {
 
     List<Depense> findByProjetId(UUID projetId);
 
+    @Query("SELECT COALESCE(SUM(d.montant), 0) FROM Depense d WHERE d.statut = 'VALIDEE' AND d.projetId = :projetId")
+    BigDecimal sumValideesByProjet(@Param("projetId") UUID projetId);
+
     List<Depense> findByStatut(StatutDepense statut);
 
     List<Depense> findByLigneBudgetaireId(UUID ligneId);

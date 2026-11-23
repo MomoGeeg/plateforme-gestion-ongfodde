@@ -1,5 +1,6 @@
 package ong.fodde.modules.projets.dto;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
@@ -42,13 +43,19 @@ public record ProjetRequest(
     List<UUID> equipeIds,
 
     /** Bailleur de fonds (nom) : obligatoire à la création, créé s'il n'est pas encore enregistré. */
-    String bailleur
+    String bailleur,
+
+    /** Budget du projet : saisi une seule fois par le RP à la création. */
+    BigDecimal budgetTotal,
+
+    /** Résultats attendus saisis à la création (libellés). */
+    List<String> resultats
 ) {
     /** Compatibilité : fiche sans bailleur (modification d'un projet existant). */
     public ProjetRequest(String code, String titre, String description, String objectifGeneral,
                          String zoneGeographique, LocalDate dateDebut, LocalDate dateFin, Devise devise,
                          UUID responsableId, UUID chefProjetId, List<UUID> equipeIds) {
         this(code, titre, description, objectifGeneral, zoneGeographique, dateDebut, dateFin, devise,
-                responsableId, chefProjetId, equipeIds, null);
+                responsableId, chefProjetId, equipeIds, null, null, null);
     }
 }

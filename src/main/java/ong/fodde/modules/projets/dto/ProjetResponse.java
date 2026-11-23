@@ -27,5 +27,8 @@ public record ProjetResponse(
     String chefProjetNom,
     String motifRenvoi,
     /** Bailleur(s) de fonds, séparés par une virgule. */
-    String bailleur
+    String bailleur,
+    /** Dépenses validées imputées au projet, déduites du budget. */
+    BigDecimal montantDepense,
+    BigDecimal budgetRestant
 ) {}
