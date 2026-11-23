@@ -38,6 +38,17 @@ public record ProjetRequest(
     /** Chef de projet (compte, en général un chargé de programme). */
     UUID chefProjetId,
 
-    /** Membres de l'équipe (comptes) — facultatif à la création. */
-    List<UUID> equipeIds
-) {}
+    /** Membres de l'équipe (comptes) ; le chef de projet la constitue ensuite depuis la fiche. */
+    List<UUID> equipeIds,
+
+    /** Bailleur de fonds (nom) : obligatoire à la création, créé s'il n'est pas encore enregistré. */
+    String bailleur
+) {
+    /** Compatibilité : fiche sans bailleur (modification d'un projet existant). */
+    public ProjetRequest(String code, String titre, String description, String objectifGeneral,
+                         String zoneGeographique, LocalDate dateDebut, LocalDate dateFin, Devise devise,
+                         UUID responsableId, UUID chefProjetId, List<UUID> equipeIds) {
+        this(code, titre, description, objectifGeneral, zoneGeographique, dateDebut, dateFin, devise,
+                responsableId, chefProjetId, equipeIds, null);
+    }
+}
