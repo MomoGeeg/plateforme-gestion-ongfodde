@@ -113,7 +113,36 @@ class PerimetreTest {
 
     private PerimetreRequest demande(UUID technicienId, UUID superviseurId) {
         return new PerimetreRequest(projet.getId(), "Périmètre de Saré Yoba", "Saré Yoba", "Médina Yoro Foulah",
-                "Médina Yoro Foulah", new BigDecimal("2.5"), technicienId, superviseurId);
+                "Médina Yoro Foulah", new BigDecimal("2.5"), technicienId, superviseurId,
+                new BigDecimal("12.6789123"), new BigDecimal("-14.0021"), List.of("Oignon", " Tomate ", "", "Oignon"));
+    }
+
+    @Test
+    void lePerimetreGardeSesCoordonneesEtSesCultures() {
+        PerimetreResponse p = service.creer(demande(null, null), chef);
+        assertEquals(new BigDecimal("12.678912"), p.latitude());
+        assertEquals(new BigDecimal("-14.002100"), p.longitude());
+        assertEquals(List.of("Oignon", "Tomate"), p.cultures());
+    }
+
+    @Test
+    void desCoordonneesIncompletesOuHorsLimitesSontRefusees() {
+        PerimetreRequest seule = new PerimetreRequest(projet.getId(), "X", "Y", null, null, null, null, null,
+                new BigDecimal("12.6"), null, null);
+        assertThrows(BusinessException.class, () -> service.creer(seule, chef));
+        PerimetreRequest hors = new PerimetreRequest(projet.getId(), "X", "Y", null, null, null, null, null,
+                new BigDecimal("95"), new BigDecimal("-14"), null);
+        assertThrows(BusinessException.class, () -> service.creer(hors, chef));
+    }
+
+    @Test
+    void laCarteEstReserveeAuRpEtAuSe() {
+        service.creer(demande(null, null), chef);
+        when(perimetres.findByIsDeletedFalseOrderByNomAsc()).thenReturn(lesPerimetres);
+        assertEquals(1, service.carte(rp).size());
+        assertEquals(1, service.carte(compte("ROLE_SE")).size());
+        assertThrows(AccessDeniedException.class, () -> service.carte(chef));
+        assertThrows(AccessDeniedException.class, () -> service.carte(technicien));
     }
 
     @Test
@@ -151,7 +180,7 @@ class PerimetreTest {
     @Test
     void unPerimetreNeChangePasDeProjet() {
         PerimetreResponse p = service.creer(demande(null, null), chef);
-        PerimetreRequest ailleurs = new PerimetreRequest(UUID.randomUUID(), "X", "Y", null, null, null, null, null);
+        PerimetreRequest ailleurs = new PerimetreRequest(UUID.randomUUID(), "X", "Y", null, null, null, null, null, null, null, null);
         assertThrows(BusinessException.class, () -> service.modifier(p.id(), ailleurs, chef));
     }
 

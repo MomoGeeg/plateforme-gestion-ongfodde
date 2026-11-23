@@ -1,6 +1,7 @@
 package ong.fodde.modules.projets.dto;
 
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.UUID;
 
 import jakarta.validation.constraints.NotBlank;
@@ -19,7 +20,10 @@ public final class PerimetreDtos {
             String departement,
             BigDecimal superficieHa,
             UUID technicienId,
-            UUID superviseurId) {
+            UUID superviseurId,
+            BigDecimal latitude,
+            BigDecimal longitude,
+            List<String> cultures) {
     }
 
     public record PerimetreResponse(
@@ -36,6 +40,9 @@ public final class PerimetreDtos {
             String technicienNom,
             UUID superviseurId,
             String superviseurNom,
-            long nbActivites) {
+            long nbActivites,
+            BigDecimal latitude,
+            BigDecimal longitude,
+            List<String> cultures) {
     }
 }
