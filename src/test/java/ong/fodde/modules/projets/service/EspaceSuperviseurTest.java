@@ -1,9 +1,12 @@
 package ong.fodde.modules.projets.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.Mockito.mock;
@@ -204,11 +207,108 @@ class EspaceSuperviseurTest {
     }
 
     @Test
-    void unDocumentValideNeSeRemetPlus() {
+    void unDocumentViseNeSeRemetPlus() {
         SuiviResponse r = suiviService.soumettre(new SuiviRequest(TypeSuivi.RAPPORT, moisCourant, "Rapport"), technicien);
-        assertEquals(StatutSuivi.VALIDE, suiviService.decider(r.id(), new DecisionRequest(true, null), superviseur).statut());
+        assertEquals(StatutSuivi.TRANSMIS, suiviService.decider(r.id(), new DecisionRequest(true, null), superviseur).statut());
         assertThrows(BusinessException.class,
                 () -> suiviService.soumettre(new SuiviRequest(TypeSuivi.RAPPORT, moisCourant, "Encore"), technicien));
+    }
+
+    // Circuit du rapport : superviseur, puis coordonnateur, puis diffusion
+
+    @Test
+    void leSuperviseurTransmetAuCoordonnateurQuiValide() {
+        SuiviResponse r = suiviService.soumettre(new SuiviRequest(TypeSuivi.RAPPORT, moisCourant, "Rapport"), technicien);
+        SuiviMensuel enBase = suivis.findById(r.id()).orElseThrow();
+        when(suivis.findByTechnicienIdInAndIsDeletedFalseOrderByMoisDescTypeAsc(anyCollection())).thenReturn(List.of(enBase));
+        assertTrue(suiviService.suivisEquipe(superviseur).get(0).aDecider());
+
+        SuiviResponse vise = suiviService.decider(r.id(), new DecisionRequest(true, null), superviseur);
+        assertEquals(StatutSuivi.TRANSMIS, vise.statut());
+        assertEquals("Aliou Diallo", vise.viseParNom());
+        assertNotNull(vise.dateVisa());
+        assertThrows(AccessDeniedException.class,
+                () -> suiviService.decider(r.id(), new DecisionRequest(true, null), superviseur));
+
+        SuiviResponse valide = suiviService.decider(r.id(), new DecisionRequest(true, null), coordonnateur);
+        assertEquals(StatutSuivi.VALIDE, valide.statut());
+        assertEquals("Aliou Badji", valide.decideParNom());
+        assertEquals(List.of("PROJ-2026-002"), valide.projets());
+        assertThrows(BusinessException.class,
+                () -> suiviService.decider(r.id(), new DecisionRequest(true, null), coordonnateur));
+    }
+
+    @Test
+    void leCoordonnateurNeDecidePasAvantLeSuperviseur() {
+        SuiviResponse r = suiviService.soumettre(new SuiviRequest(TypeSuivi.RAPPORT, moisCourant, "Rapport"), technicien);
+        assertThrows(AccessDeniedException.class,
+                () -> suiviService.decider(r.id(), new DecisionRequest(true, null), coordonnateur));
+    }
+
+    @Test
+    void leCoordonnateurVoitLesRapportsDesTechniciensDeSesProjets() {
+        Projet projet = projets.findById(projetId).orElseThrow();
+        when(projets.findByChefProjetId(coordonnateur.getId())).thenReturn(List.of(projet));
+        when(perimetres.findByProjetIdAndIsDeletedFalseOrderByNomAsc(projetId)).thenReturn(List.of(perimetre));
+        SuiviResponse r = suiviService.soumettre(new SuiviRequest(TypeSuivi.RAPPORT, moisCourant, "Rapport"), technicien);
+        SuiviMensuel enBase = suivis.findById(r.id()).orElseThrow();
+        when(suivis.findByTechnicienIdInAndIsDeletedFalseOrderByMoisDescTypeAsc(anyCollection())).thenReturn(List.of(enBase));
+
+        assertFalse(suiviService.suivisEquipe(coordonnateur).get(0).aDecider());
+        suiviService.decider(r.id(), new DecisionRequest(true, null), superviseur);
+        assertTrue(suiviService.suivisEquipe(coordonnateur).get(0).aDecider());
+    }
+
+    @Test
+    void leCoordonnateurRenvoieALAuteurAvecUnCommentaire() {
+        SuiviResponse r = suiviService.soumettre(new SuiviRequest(TypeSuivi.RAPPORT, moisCourant, "Version 1"), technicien);
+        suiviService.decider(r.id(), new DecisionRequest(true, null), superviseur);
+        assertThrows(BusinessException.class,
+                () -> suiviService.decider(r.id(), new DecisionRequest(false, " "), coordonnateur));
+
+        SuiviResponse renvoye = suiviService.decider(r.id(), new DecisionRequest(false, "Ajoutez les effectifs"), coordonnateur);
+        assertEquals(StatutSuivi.A_REVOIR, renvoye.statut());
+        assertEquals("Ajoutez les effectifs", suiviService.mesSuivis(technicienAvecSuivis(r)).get(0).commentaire());
+
+        SuiviResponse remis = suiviService.soumettre(new SuiviRequest(TypeSuivi.RAPPORT, moisCourant, "Version 2"), technicien);
+        assertEquals(StatutSuivi.SOUMIS, remis.statut());
+        assertNull(remis.viseParNom());
+        assertNull(remis.commentaire());
+    }
+
+    @Test
+    void leSuperviseurCorrigeLeTexteEnLeVisant() {
+        SuiviResponse r = suiviService.soumettre(new SuiviRequest(TypeSuivi.RAPPORT, moisCourant, "Texte du technicien"),
+                technicien);
+        SuiviResponse vise = suiviService.decider(r.id(),
+                new DecisionRequest(true, null, "Texte corrigé par le superviseur"), superviseur);
+        assertEquals("Texte corrigé par le superviseur", vise.contenu());
+        assertEquals("Texte du technicien", vise.contenuInitial());
+    }
+
+    @Test
+    void sansCoordonnateurLeVisaDuSuperviseurSuffit() {
+        projets.findById(projetId).orElseThrow().setChefProjetId(null);
+        SuiviResponse r = suiviService.soumettre(new SuiviRequest(TypeSuivi.RAPPORT, moisCourant, "Rapport"), technicien);
+        assertEquals(StatutSuivi.VALIDE, suiviService.decider(r.id(), new DecisionRequest(true, null), superviseur).statut());
+    }
+
+    @Test
+    void lesDocumentsValidesSontDiffuses() {
+        SuiviResponse r = suiviService.soumettre(new SuiviRequest(TypeSuivi.RAPPORT, moisCourant, "Rapport"), technicien);
+        suiviService.decider(r.id(), new DecisionRequest(true, null), superviseur);
+        suiviService.decider(r.id(), new DecisionRequest(true, null), coordonnateur);
+        SuiviMensuel enBase = suivis.findById(r.id()).orElseThrow();
+        when(suivis.findByStatutAndIsDeletedFalseOrderByDateDecisionDesc(StatutSuivi.VALIDE)).thenReturn(List.of(enBase));
+        List<SuiviResponse> diffuses = suiviService.valides(autre);
+        assertEquals(1, diffuses.size());
+        assertFalse(diffuses.get(0).aDecider());
+    }
+
+    private User technicienAvecSuivis(SuiviResponse r) {
+        SuiviMensuel enBase = suivis.findById(r.id()).orElseThrow();
+        when(suivis.findByTechnicienIdAndIsDeletedFalseOrderByMoisDescTypeAsc(technicien.getId())).thenReturn(List.of(enBase));
+        return technicien;
     }
 
     @Test

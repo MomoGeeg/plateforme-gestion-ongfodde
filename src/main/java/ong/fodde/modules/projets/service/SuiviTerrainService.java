@@ -43,8 +43,9 @@ import ong.fodde.shared.exception.ResourceNotFoundException;
 
 /**
  * Suivi mensuel du terrain : le technicien (ou l'animateur) remet son planning et son rapport du
- * mois ; le superviseur de ses périmètres (ou le coordonnateur de ses projets) les valide ou les
- * renvoie à revoir, et voit son équipe.
+ * mois ; le superviseur de ses périmètres le vise (en corrigeant le texte au besoin) et le transmet
+ * au coordonnateur du projet, qui le valide ou le renvoie à son auteur. Validé, le document est
+ * visible du RAF, du RP, du SE et du suivi-évaluation.
  */
 @Service
 @Transactional
@@ -92,60 +93,165 @@ public class SuiviTerrainService {
         SuiviMensuel suivi = suiviRepository
                 .findByTechnicienIdAndTypeAndMoisAndIsDeletedFalse(user.getId(), request.type(), request.mois())
                 .orElseGet(SuiviMensuel::new);
-        if (suivi.getStatut() == StatutSuivi.VALIDE && suivi.getId() != null) {
-            throw new BusinessException("Ce document est déjà validé par le superviseur");
+        if (suivi.getId() != null && suivi.getStatut() == StatutSuivi.TRANSMIS) {
+            throw new BusinessException("Ce document est déjà validé par le superviseur et transmis au coordonnateur");
+        }
+        if (suivi.getId() != null && suivi.getStatut() == StatutSuivi.VALIDE) {
+            throw new BusinessException("Ce document est déjà validé");
         }
         suivi.setType(request.type());
         suivi.setTechnicienId(user.getId());
         suivi.setMois(request.mois());
         suivi.setContenu(request.contenu().trim());
+        suivi.setContenuInitial(null);
         suivi.setStatut(StatutSuivi.SOUMIS);
+        suivi.setCommentaire(null);
         suivi.setDecidePar(null);
         suivi.setDateDecision(null);
-        return toResponse(suiviRepository.save(suivi));
+        suivi.setVisePar(null);
+        suivi.setDateVisa(null);
+        return toResponse(suiviRepository.save(suivi), user);
     }
 
     /** Plannings et rapports remis par le technicien connecté. */
     @Transactional(readOnly = true)
     public List<SuiviResponse> mesSuivis(User user) {
         return suiviRepository.findByTechnicienIdAndIsDeletedFalseOrderByMoisDescTypeAsc(user.getId()).stream()
-                .map(this::toResponse).toList();
+                .map(s -> toResponse(s, user)).toList();
     }
 
-    /** Plannings et rapports des techniciens et animateurs encadrés par l'utilisateur connecté. */
+    /**
+     * Plannings et rapports suivis par l'utilisateur connecté : techniciens de ses périmètres
+     * (superviseur), techniciens des périmètres et animateurs de ses projets (coordonnateur).
+     */
     @Transactional(readOnly = true)
     public List<SuiviResponse> suivisEquipe(User user) {
         Set<UUID> techniciens = new java.util.HashSet<>(techniciensEncadres(user.getId()).keySet());
         techniciens.addAll(animateursEncadres(user.getId()).keySet());
+        techniciens.addAll(techniciensDesProjets(user.getId()));
         if (techniciens.isEmpty()) {
             return List.of();
         }
         return suiviRepository.findByTechnicienIdInAndIsDeletedFalseOrderByMoisDescTypeAsc(techniciens).stream()
-                .map(this::toResponse).toList();
+                .map(s -> toResponse(s, user)).toList();
     }
 
-    /** Validation par le superviseur ; un renvoi « à revoir » exige un commentaire. */
+    /** Plannings et rapports validés par le coordonnateur : RAF, RP, SE et suivi-évaluation. */
+    @Transactional(readOnly = true)
+    public List<SuiviResponse> valides(User user) {
+        return suiviRepository.findByStatutAndIsDeletedFalseOrderByDateDecisionDesc(StatutSuivi.VALIDE).stream()
+                .map(s -> toResponse(s, user)).toList();
+    }
+
+    /**
+     * Décision sur un document. Remis (SOUMIS) : le superviseur le vise, en corrigeant le texte au
+     * besoin, et le transmet au coordonnateur du projet ; sans superviseur, le coordonnateur décide
+     * directement. Transmis : le coordonnateur valide, et le document est diffusé. Un renvoi à
+     * l'auteur exige un commentaire.
+     */
     public SuiviResponse decider(UUID id, DecisionRequest request, User user) {
         SuiviMensuel suivi = suiviRepository.findById(id)
                 .filter(s -> !Boolean.TRUE.equals(s.getIsDeleted()))
                 .orElseThrow(() -> new ResourceNotFoundException("Document introuvable : " + id));
-        if (!estSuperviseurDe(user, suivi.getTechnicienId())) {
-            throw new AccessDeniedException("Seul le superviseur ou le coordonnateur valide ces documents");
-        }
-        if (suivi.getStatut() != StatutSuivi.SOUMIS) {
+        if (suivi.getStatut() != StatutSuivi.SOUMIS && suivi.getStatut() != StatutSuivi.TRANSMIS) {
             throw new BusinessException("Ce document a déjà été traité");
+        }
+        if (!doitDecider(user, suivi)) {
+            throw new AccessDeniedException(suivi.getStatut() == StatutSuivi.TRANSMIS
+                    ? "Seul le coordonnateur du projet valide ce document"
+                    : "Seul le superviseur valide ce document");
         }
         boolean valide = Boolean.TRUE.equals(request.valide());
         String commentaire = request.commentaire() == null || request.commentaire().isBlank()
                 ? null : request.commentaire().trim();
-        if (!valide && commentaire == null) {
-            throw new BusinessException("Indiquez ce qui est à revoir");
+        LocalDateTime maintenant = LocalDateTime.now();
+        if (!valide) {
+            if (commentaire == null) {
+                throw new BusinessException("Indiquez ce qui est à corriger");
+            }
+            suivi.setStatut(StatutSuivi.A_REVOIR);
+            suivi.setCommentaire(commentaire);
+            suivi.setDecidePar(user.getId());
+            suivi.setDateDecision(maintenant);
+            return toResponse(suiviRepository.save(suivi), user);
         }
-        suivi.setStatut(valide ? StatutSuivi.VALIDE : StatutSuivi.A_REVOIR);
         suivi.setCommentaire(commentaire);
+        if (suivi.getStatut() == StatutSuivi.SOUMIS) {
+            corriger(suivi, request.contenu());
+            Set<UUID> coordonnateurs = coordonnateursDe(suivi.getTechnicienId());
+            if (!coordonnateurs.isEmpty() && !coordonnateurs.contains(user.getId())) {
+                suivi.setStatut(StatutSuivi.TRANSMIS);
+                suivi.setVisePar(user.getId());
+                suivi.setDateVisa(maintenant);
+                return toResponse(suiviRepository.save(suivi), user);
+            }
+        }
+        suivi.setStatut(StatutSuivi.VALIDE);
         suivi.setDecidePar(user.getId());
-        suivi.setDateDecision(LocalDateTime.now());
-        return toResponse(suiviRepository.save(suivi));
+        suivi.setDateDecision(maintenant);
+        return toResponse(suiviRepository.save(suivi), user);
+    }
+
+    /** Texte corrigé par le superviseur : le texte de l'auteur est gardé la première fois. */
+    private static void corriger(SuiviMensuel suivi, String contenu) {
+        if (contenu == null || contenu.isBlank() || contenu.trim().equals(suivi.getContenu())) {
+            return;
+        }
+        if (suivi.getContenuInitial() == null) {
+            suivi.setContenuInitial(suivi.getContenu());
+        }
+        suivi.setContenu(contenu.trim());
+    }
+
+    /**
+     * Vrai si c'est à l'utilisateur de décider maintenant : un document remis attend un superviseur
+     * des périmètres de l'auteur (à défaut, un coordonnateur de ses projets) ; un document transmis
+     * attend un coordonnateur. L'auteur ne décide jamais de son propre document.
+     */
+    private boolean doitDecider(User user, SuiviMensuel s) {
+        if (user == null || user.getId().equals(s.getTechnicienId())) {
+            return false;
+        }
+        if (s.getStatut() != StatutSuivi.SOUMIS && s.getStatut() != StatutSuivi.TRANSMIS) {
+            return false;
+        }
+        if (droits.aUnRole(user, "ROLE_ADMIN")) {
+            return true;
+        }
+        if (s.getStatut() == StatutSuivi.TRANSMIS) {
+            return coordonnateursDe(s.getTechnicienId()).contains(user.getId());
+        }
+        Set<UUID> superviseurs = superviseursDe(s.getTechnicienId());
+        return superviseurs.isEmpty()
+                ? coordonnateursDe(s.getTechnicienId()).contains(user.getId())
+                : superviseurs.contains(user.getId());
+    }
+
+    private Set<UUID> superviseursDe(UUID auteurId) {
+        return perimetreRepository.findByTechnicienIdAndIsDeletedFalseOrderByNomAsc(auteurId).stream()
+                .map(Perimetre::getSuperviseurId).filter(Objects::nonNull).collect(Collectors.toSet());
+    }
+
+    private Set<UUID> coordonnateursDe(UUID auteurId) {
+        return projetsDe(auteurId).stream()
+                .map(Projet::getChefProjetId).filter(Objects::nonNull).collect(Collectors.toSet());
+    }
+
+    /** Projets de l'auteur : ceux de ses périmètres et ceux qu'il anime. */
+    private List<Projet> projetsDe(UUID auteurId) {
+        Map<UUID, Projet> projets = new LinkedHashMap<>();
+        perimetreRepository.findByTechnicienIdAndIsDeletedFalseOrderByNomAsc(auteurId).stream()
+                .map(Perimetre::getProjetId).filter(Objects::nonNull).distinct()
+                .forEach(id -> projetRepository.findById(id).ifPresent(p -> projets.put(p.getId(), p)));
+        projetsAnimes(auteurId).forEach(p -> projets.putIfAbsent(p.getId(), p));
+        return new ArrayList<>(projets.values());
+    }
+
+    /** Techniciens des périmètres des projets dont l'utilisateur est le coordonnateur. */
+    private Set<UUID> techniciensDesProjets(UUID coordonnateurId) {
+        return projetRepository.findByChefProjetId(coordonnateurId).stream()
+                .flatMap(p -> perimetreRepository.findByProjetIdAndIsDeletedFalseOrderByNomAsc(p.getId()).stream())
+                .map(Perimetre::getTechnicienId).filter(Objects::nonNull).collect(Collectors.toSet());
     }
 
     /**
@@ -218,19 +324,6 @@ public class SuiviTerrainService {
         return equipe;
     }
 
-    /**
-     * Vrai si l'utilisateur supervise au moins un périmètre de ce technicien, ou coordonne au moins
-     * un projet de cet animateur.
-     */
-    public boolean estSuperviseurDe(User user, UUID technicienId) {
-        if (droits.aUnRole(user, "ROLE_ADMIN")) {
-            return true;
-        }
-        return perimetreRepository.findByTechnicienIdAndIsDeletedFalseOrderByNomAsc(technicienId).stream()
-                .anyMatch(p -> user.getId().equals(p.getSuperviseurId()))
-                || projetsAnimes(technicienId).stream().anyMatch(p -> user.getId().equals(p.getChefProjetId()));
-    }
-
     private List<Projet> projetsAnimes(UUID animateurId) {
         return animateurRepository.findByAnimateurIdAndIsDeletedFalse(animateurId).stream()
                 .map(a -> projetRepository.findById(a.getProjetId()).orElse(null))
@@ -292,9 +385,12 @@ public class SuiviTerrainService {
                 .orElse(null);
     }
 
-    private SuiviResponse toResponse(SuiviMensuel s) {
+    private SuiviResponse toResponse(SuiviMensuel s, User user) {
         return new SuiviResponse(s.getId(), s.getType(), s.getMois(), s.getTechnicienId(), nomDe(s.getTechnicienId()),
                 s.getContenu(), s.getStatut(), s.getCommentaire(), nomDe(s.getDecidePar()), s.getDateDecision(),
-                s.getCreatedAt(), s.getType() == TypeSuivi.PLANNING ? activitesDuMois(s) : List.of());
+                s.getCreatedAt(), s.getType() == TypeSuivi.PLANNING ? activitesDuMois(s) : List.of(),
+                nomDe(s.getVisePar()), s.getDateVisa(), s.getContenuInitial(),
+                projetsDe(s.getTechnicienId()).stream().map(Projet::getCode).filter(Objects::nonNull).toList(),
+                doitDecider(user, s));
     }
 }

@@ -12,7 +12,7 @@ import ong.fodde.modules.projets.entity.StatutActivite;
 import ong.fodde.modules.projets.entity.StatutSuivi;
 import ong.fodde.modules.projets.entity.TypeSuivi;
 
-/** Planning et rapport mensuels du technicien ; équipe du superviseur. */
+/** Planning et rapport mensuels du technicien ; équipe du superviseur ; rapports validés. */
 public final class SuiviDtos {
 
     private SuiviDtos() {
@@ -24,7 +24,12 @@ public final class SuiviDtos {
             @NotBlank String contenu) {
     }
 
-    public record DecisionRequest(@NotNull Boolean valide, String commentaire) {
+    /** `contenu` : texte corrigé par le superviseur au moment du visa (facultatif). */
+    public record DecisionRequest(@NotNull Boolean valide, String commentaire, String contenu) {
+
+        public DecisionRequest(Boolean valide, String commentaire) {
+            this(valide, commentaire, null);
+        }
     }
 
     /** Activité prévue dans le mois, rappelée sous le planning. */
@@ -35,7 +40,9 @@ public final class SuiviDtos {
     public record SuiviResponse(UUID id, TypeSuivi type, String mois, UUID technicienId, String technicienNom,
                                 String contenu, StatutSuivi statut, String commentaire, String decideParNom,
                                 LocalDateTime dateDecision, LocalDateTime createdAt,
-                                List<ActiviteDuMois> activites) {
+                                List<ActiviteDuMois> activites,
+                                String viseParNom, LocalDateTime dateVisa, String contenuInitial,
+                                List<String> projets, boolean aDecider) {
     }
 
     /** Un technicien encadré, avec l'avancement de ses activités et l'état de son suivi mensuel. */
