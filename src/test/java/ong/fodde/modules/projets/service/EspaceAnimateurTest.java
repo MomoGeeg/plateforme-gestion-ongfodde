@@ -69,7 +69,7 @@ class EspaceAnimateurTest {
             mock(StockageFichierService.class), droits);
     private final AnimateurService animateurService = new AnimateurService(animateurs, projets, users, droits);
     private final SuiviTerrainService suiviService = new SuiviTerrainService(suivis, perimetres, activites, users,
-            animateurs, projets, droits);
+            animateurs, projets, droits, mock(StockageFichierService.class));
 
     private User animateur;
     private User coordonnateur;
@@ -126,7 +126,8 @@ class EspaceAnimateurTest {
             when(suivis.findById(s.getId())).thenReturn(Optional.of(s));
             return s;
         });
-        when(suivis.findByTechnicienIdAndTypeAndMoisAndIsDeletedFalse(any(), any(), any())).thenReturn(Optional.empty());
+        when(suivis.findByTechnicienIdAndTypeAndMoisAndProjetIdAndIsDeletedFalse(any(), any(), any(), any()))
+                .thenReturn(Optional.empty());
     }
 
     private User compte(String role) {
@@ -282,7 +283,7 @@ class EspaceAnimateurTest {
     @Test
     void leCoordonnateurValideLePlanningDeLAnimateur() {
         SuiviResponse r = suiviService.soumettre(new SuiviRequest(TypeSuivi.PLANNING, YearMonth.now().toString(),
-                "Causeries dans 4 quartiers"), animateur);
+                null, "Causeries dans 4 quartiers"), null, animateur);
         assertThrows(AccessDeniedException.class, () -> suiviService.decider(r.id(), new DecisionRequest(true, null), autre));
         assertEquals(StatutSuivi.VALIDE, suiviService.decider(r.id(), new DecisionRequest(true, null), coordonnateur).statut());
     }

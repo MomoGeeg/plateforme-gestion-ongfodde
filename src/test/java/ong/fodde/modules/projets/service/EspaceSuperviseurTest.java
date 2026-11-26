@@ -9,7 +9,9 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyCollection;
+import static org.mockito.ArgumentMatchers.startsWith;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
@@ -21,6 +23,7 @@ import java.util.UUID;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.security.access.AccessDeniedException;
 
 import ong.fodde.modules.acquisitions.dto.AcquisitionRequest;
@@ -30,7 +33,9 @@ import ong.fodde.modules.acquisitions.entity.CategorieAcquisition;
 import ong.fodde.modules.acquisitions.entity.StatutAcquisition;
 import ong.fodde.modules.acquisitions.repository.AcquisitionRepository;
 import ong.fodde.modules.acquisitions.service.AcquisitionService;
+import ong.fodde.modules.auth.entity.Role;
 import ong.fodde.modules.auth.entity.User;
+import ong.fodde.modules.ged.service.StockageFichierService;
 import ong.fodde.modules.auth.repository.UserRepository;
 import ong.fodde.modules.historique.service.HistoriqueService;
 import ong.fodde.modules.projets.dto.SuiviDtos.DecisionRequest;
@@ -62,11 +67,13 @@ class EspaceSuperviseurTest {
     private final AcquisitionRepository acquisitions = mock(AcquisitionRepository.class);
     private final ActiviteRepository activites = mock(ActiviteRepository.class);
     private final SuiviMensuelRepository suivis = mock(SuiviMensuelRepository.class);
+    private final StockageFichierService stockage = mock(StockageFichierService.class);
     private final AccesPersonnel acces = new AccesPersonnel(mock(EmployeRepository.class));
     private final AcquisitionService acquisitionService = new AcquisitionService(acquisitions, users, projets,
             mock(HistoriqueService.class), acces, perimetres);
     private final SuiviTerrainService suiviService = new SuiviTerrainService(suivis, perimetres, activites, users,
-            mock(ong.fodde.modules.projets.repository.AnimateurProjetRepository.class), projets, new DroitsProjet(acces));
+            mock(ong.fodde.modules.projets.repository.AnimateurProjetRepository.class), projets, new DroitsProjet(acces),
+            stockage);
 
     private User technicien;
     private User superviseur;
@@ -110,11 +117,13 @@ class EspaceSuperviseurTest {
                 s.setId(UUID.randomUUID());
             }
             when(suivis.findById(s.getId())).thenReturn(Optional.of(s));
-            when(suivis.findByTechnicienIdAndTypeAndMoisAndIsDeletedFalse(s.getTechnicienId(), s.getType(), s.getMois()))
+            when(suivis.findByTechnicienIdAndTypeAndMoisAndProjetIdAndIsDeletedFalse(s.getTechnicienId(), s.getType(),
+                    s.getMois(), s.getProjetId()))
                     .thenReturn(Optional.of(s));
             return s;
         });
-        when(suivis.findByTechnicienIdAndTypeAndMoisAndIsDeletedFalse(any(), any(), any())).thenReturn(Optional.empty());
+        when(suivis.findByTechnicienIdAndTypeAndMoisAndProjetIdAndIsDeletedFalse(any(), any(), any(), any()))
+                .thenReturn(Optional.empty());
     }
 
     private User compte(String nom) {
@@ -190,17 +199,16 @@ class EspaceSuperviseurTest {
         when(activites.findByResponsableIdAndIsDeletedFalse(technicien.getId())).thenReturn(List.of());
         when(activites.findByPerimetreIdInAndIsDeletedFalse(anyCollection())).thenReturn(List.of(dansLeMois, autreMois));
 
-        SuiviResponse r = suiviService.soumettre(new SuiviRequest(TypeSuivi.PLANNING, moisCourant, "Repiquage semaine 2"),
-                technicien);
+        SuiviResponse r = suiviService.soumettre(new SuiviRequest(TypeSuivi.PLANNING, moisCourant, null, "Repiquage semaine 2"), null, technicien);
         assertEquals(StatutSuivi.SOUMIS, r.statut());
         assertEquals(List.of("Repiquage"), r.activites().stream().map(a -> a.titre()).toList());
     }
 
     @Test
     void uneNouvelleRemiseRemplaceLaPrecedenteNonValidee() {
-        SuiviResponse premier = suiviService.soumettre(new SuiviRequest(TypeSuivi.RAPPORT, moisCourant, "Version 1"), technicien);
+        SuiviResponse premier = suiviService.soumettre(new SuiviRequest(TypeSuivi.RAPPORT, moisCourant, null, "Version 1"), word("rapport.docx"), technicien);
         suiviService.decider(premier.id(), new DecisionRequest(false, "Ajoutez les effectifs"), superviseur);
-        SuiviResponse second = suiviService.soumettre(new SuiviRequest(TypeSuivi.RAPPORT, moisCourant, "Version 2"), technicien);
+        SuiviResponse second = suiviService.soumettre(new SuiviRequest(TypeSuivi.RAPPORT, moisCourant, null, "Version 2"), word("rapport.docx"), technicien);
         assertEquals(premier.id(), second.id());
         assertEquals(StatutSuivi.SOUMIS, second.statut());
         assertEquals("Version 2", second.contenu());
@@ -208,17 +216,17 @@ class EspaceSuperviseurTest {
 
     @Test
     void unDocumentViseNeSeRemetPlus() {
-        SuiviResponse r = suiviService.soumettre(new SuiviRequest(TypeSuivi.RAPPORT, moisCourant, "Rapport"), technicien);
+        SuiviResponse r = suiviService.soumettre(new SuiviRequest(TypeSuivi.RAPPORT, moisCourant, null, "Rapport"), word("rapport.docx"), technicien);
         assertEquals(StatutSuivi.TRANSMIS, suiviService.decider(r.id(), new DecisionRequest(true, null), superviseur).statut());
         assertThrows(BusinessException.class,
-                () -> suiviService.soumettre(new SuiviRequest(TypeSuivi.RAPPORT, moisCourant, "Encore"), technicien));
+                () -> suiviService.soumettre(new SuiviRequest(TypeSuivi.RAPPORT, moisCourant, null, "Encore"), word("rapport.docx"), technicien));
     }
 
     // Circuit du rapport : superviseur, puis coordonnateur, puis diffusion
 
     @Test
     void leSuperviseurTransmetAuCoordonnateurQuiValide() {
-        SuiviResponse r = suiviService.soumettre(new SuiviRequest(TypeSuivi.RAPPORT, moisCourant, "Rapport"), technicien);
+        SuiviResponse r = suiviService.soumettre(new SuiviRequest(TypeSuivi.RAPPORT, moisCourant, null, "Rapport"), word("rapport.docx"), technicien);
         SuiviMensuel enBase = suivis.findById(r.id()).orElseThrow();
         when(suivis.findByTechnicienIdInAndIsDeletedFalseOrderByMoisDescTypeAsc(anyCollection())).thenReturn(List.of(enBase));
         assertTrue(suiviService.suivisEquipe(superviseur).get(0).aDecider());
@@ -233,14 +241,14 @@ class EspaceSuperviseurTest {
         SuiviResponse valide = suiviService.decider(r.id(), new DecisionRequest(true, null), coordonnateur);
         assertEquals(StatutSuivi.VALIDE, valide.statut());
         assertEquals("Aliou Badji", valide.decideParNom());
-        assertEquals(List.of("PROJ-2026-002"), valide.projets());
+        assertEquals("PROJ-2026-002", valide.projetCode());
         assertThrows(BusinessException.class,
                 () -> suiviService.decider(r.id(), new DecisionRequest(true, null), coordonnateur));
     }
 
     @Test
     void leCoordonnateurNeDecidePasAvantLeSuperviseur() {
-        SuiviResponse r = suiviService.soumettre(new SuiviRequest(TypeSuivi.RAPPORT, moisCourant, "Rapport"), technicien);
+        SuiviResponse r = suiviService.soumettre(new SuiviRequest(TypeSuivi.RAPPORT, moisCourant, null, "Rapport"), word("rapport.docx"), technicien);
         assertThrows(AccessDeniedException.class,
                 () -> suiviService.decider(r.id(), new DecisionRequest(true, null), coordonnateur));
     }
@@ -250,7 +258,7 @@ class EspaceSuperviseurTest {
         Projet projet = projets.findById(projetId).orElseThrow();
         when(projets.findByChefProjetId(coordonnateur.getId())).thenReturn(List.of(projet));
         when(perimetres.findByProjetIdAndIsDeletedFalseOrderByNomAsc(projetId)).thenReturn(List.of(perimetre));
-        SuiviResponse r = suiviService.soumettre(new SuiviRequest(TypeSuivi.RAPPORT, moisCourant, "Rapport"), technicien);
+        SuiviResponse r = suiviService.soumettre(new SuiviRequest(TypeSuivi.RAPPORT, moisCourant, null, "Rapport"), word("rapport.docx"), technicien);
         SuiviMensuel enBase = suivis.findById(r.id()).orElseThrow();
         when(suivis.findByTechnicienIdInAndIsDeletedFalseOrderByMoisDescTypeAsc(anyCollection())).thenReturn(List.of(enBase));
 
@@ -261,7 +269,7 @@ class EspaceSuperviseurTest {
 
     @Test
     void leCoordonnateurRenvoieALAuteurAvecUnCommentaire() {
-        SuiviResponse r = suiviService.soumettre(new SuiviRequest(TypeSuivi.RAPPORT, moisCourant, "Version 1"), technicien);
+        SuiviResponse r = suiviService.soumettre(new SuiviRequest(TypeSuivi.RAPPORT, moisCourant, null, "Version 1"), word("rapport.docx"), technicien);
         suiviService.decider(r.id(), new DecisionRequest(true, null), superviseur);
         assertThrows(BusinessException.class,
                 () -> suiviService.decider(r.id(), new DecisionRequest(false, " "), coordonnateur));
@@ -270,7 +278,7 @@ class EspaceSuperviseurTest {
         assertEquals(StatutSuivi.A_REVOIR, renvoye.statut());
         assertEquals("Ajoutez les effectifs", suiviService.mesSuivis(technicienAvecSuivis(r)).get(0).commentaire());
 
-        SuiviResponse remis = suiviService.soumettre(new SuiviRequest(TypeSuivi.RAPPORT, moisCourant, "Version 2"), technicien);
+        SuiviResponse remis = suiviService.soumettre(new SuiviRequest(TypeSuivi.RAPPORT, moisCourant, null, "Version 2"), word("rapport.docx"), technicien);
         assertEquals(StatutSuivi.SOUMIS, remis.statut());
         assertNull(remis.viseParNom());
         assertNull(remis.commentaire());
@@ -278,8 +286,7 @@ class EspaceSuperviseurTest {
 
     @Test
     void leSuperviseurCorrigeLeTexteEnLeVisant() {
-        SuiviResponse r = suiviService.soumettre(new SuiviRequest(TypeSuivi.RAPPORT, moisCourant, "Texte du technicien"),
-                technicien);
+        SuiviResponse r = suiviService.soumettre(new SuiviRequest(TypeSuivi.PLANNING, moisCourant, null, "Texte du technicien"), null, technicien);
         SuiviResponse vise = suiviService.decider(r.id(),
                 new DecisionRequest(true, null, "Texte corrigé par le superviseur"), superviseur);
         assertEquals("Texte corrigé par le superviseur", vise.contenu());
@@ -287,15 +294,72 @@ class EspaceSuperviseurTest {
     }
 
     @Test
-    void sansCoordonnateurLeVisaDuSuperviseurSuffit() {
+    void unProjetSansCoordonnateurNeRecoitPasDeRapport() {
         projets.findById(projetId).orElseThrow().setChefProjetId(null);
-        SuiviResponse r = suiviService.soumettre(new SuiviRequest(TypeSuivi.RAPPORT, moisCourant, "Rapport"), technicien);
-        assertEquals(StatutSuivi.VALIDE, suiviService.decider(r.id(), new DecisionRequest(true, null), superviseur).statut());
+        assertThrows(BusinessException.class, () -> suiviService.soumettre(
+                new SuiviRequest(TypeSuivi.RAPPORT, moisCourant, null, null), word("rapport.docx"), technicien));
+    }
+
+    // Rapport en fichier Word
+
+    @Test
+    void leRapportExigeUnFichierWord() {
+        assertThrows(BusinessException.class, () -> suiviService.soumettre(
+                new SuiviRequest(TypeSuivi.RAPPORT, moisCourant, null, "Résumé"), null, technicien));
+        assertThrows(BusinessException.class, () -> suiviService.soumettre(
+                new SuiviRequest(TypeSuivi.RAPPORT, moisCourant, null, null), word("rapport.pdf"), technicien));
+        SuiviResponse r = suiviService.soumettre(new SuiviRequest(TypeSuivi.RAPPORT, moisCourant, null, null),
+                word("Rapport novembre.docx"), technicien);
+        assertEquals("Rapport novembre.docx", r.fichierNom());
+        assertEquals(projetId, r.projetId());
+        verify(stockage).deposer(startsWith("suivis/" + r.id() + "/"), any(), any());
+    }
+
+    @Test
+    void leProjetChoisiDoitEtreUnDesSiens() {
+        assertThrows(BusinessException.class, () -> suiviService.soumettre(
+                new SuiviRequest(TypeSuivi.RAPPORT, moisCourant, UUID.randomUUID(), null), word("rapport.docx"), technicien));
+    }
+
+    @Test
+    void leSuperviseurDeposeUneVersionCorrigee() {
+        SuiviResponse r = suiviService.soumettre(new SuiviRequest(TypeSuivi.RAPPORT, moisCourant, null, null),
+                word("rapport technicien.docx"), technicien);
+        assertThrows(AccessDeniedException.class,
+                () -> suiviService.deposerCorrection(r.id(), word("corrige.docx"), coordonnateur));
+        SuiviResponse corrige = suiviService.deposerCorrection(r.id(), word("rapport corrige.docx"), superviseur);
+        assertEquals("rapport corrige.docx", corrige.fichierNom());
+        assertEquals("rapport technicien.docx", corrige.fichierInitialNom());
+        suiviService.decider(r.id(), new DecisionRequest(true, null), superviseur);
+        assertThrows(AccessDeniedException.class,
+                () -> suiviService.deposerCorrection(r.id(), word("encore.docx"), superviseur));
+    }
+
+    @Test
+    void leFichierNestLuQueParLeCircuitPuisParLaDirection() {
+        User raf = compte("Ndiaye");
+        Role role = new Role();
+        role.setNom("ROLE_RAF");
+        raf.getRoles().add(role);
+        when(stockage.lire(any())).thenReturn(new byte[] {1, 2});
+        SuiviResponse r = suiviService.soumettre(new SuiviRequest(TypeSuivi.RAPPORT, moisCourant, null, null),
+                word("rapport.docx"), technicien);
+        assertEquals(2, suiviService.telecharger(r.id(), false, superviseur).contenu().length);
+        assertThrows(AccessDeniedException.class, () -> suiviService.telecharger(r.id(), false, raf));
+        assertThrows(AccessDeniedException.class, () -> suiviService.telecharger(r.id(), false, autre));
+        suiviService.decider(r.id(), new DecisionRequest(true, null), superviseur);
+        suiviService.decider(r.id(), new DecisionRequest(true, null), coordonnateur);
+        assertEquals("rapport.docx", suiviService.telecharger(r.id(), false, raf).nom());
+        assertThrows(AccessDeniedException.class, () -> suiviService.telecharger(r.id(), false, autre));
+    }
+
+    private static MockMultipartFile word(String nom) {
+        return new MockMultipartFile("fichier", nom, "application/octet-stream", new byte[] {80, 75, 3, 4});
     }
 
     @Test
     void lesDocumentsValidesSontDiffuses() {
-        SuiviResponse r = suiviService.soumettre(new SuiviRequest(TypeSuivi.RAPPORT, moisCourant, "Rapport"), technicien);
+        SuiviResponse r = suiviService.soumettre(new SuiviRequest(TypeSuivi.RAPPORT, moisCourant, null, "Rapport"), word("rapport.docx"), technicien);
         suiviService.decider(r.id(), new DecisionRequest(true, null), superviseur);
         suiviService.decider(r.id(), new DecisionRequest(true, null), coordonnateur);
         SuiviMensuel enBase = suivis.findById(r.id()).orElseThrow();
@@ -315,26 +379,26 @@ class EspaceSuperviseurTest {
     void leRapportDUnMoisAVenirEstRefuse() {
         String prochain = YearMonth.now().plusMonths(1).toString();
         assertThrows(BusinessException.class,
-                () -> suiviService.soumettre(new SuiviRequest(TypeSuivi.RAPPORT, prochain, "Trop tôt"), technicien));
+                () -> suiviService.soumettre(new SuiviRequest(TypeSuivi.RAPPORT, prochain, null, "Trop tôt"), word("rapport.docx"), technicien));
     }
 
     @Test
     void unTechnicienSansPerimetreNeRemetRien() {
         when(perimetres.findByTechnicienIdAndIsDeletedFalseOrderByNomAsc(autre.getId())).thenReturn(List.of());
         assertThrows(BusinessException.class,
-                () -> suiviService.soumettre(new SuiviRequest(TypeSuivi.PLANNING, moisCourant, "Plan"), autre));
+                () -> suiviService.soumettre(new SuiviRequest(TypeSuivi.PLANNING, moisCourant, null, "Plan"), null, autre));
     }
 
     @Test
     void seulLeSuperviseurDuTechnicienDecide() {
-        SuiviResponse r = suiviService.soumettre(new SuiviRequest(TypeSuivi.PLANNING, moisCourant, "Plan"), technicien);
+        SuiviResponse r = suiviService.soumettre(new SuiviRequest(TypeSuivi.PLANNING, moisCourant, null, "Plan"), null, technicien);
         assertThrows(AccessDeniedException.class,
                 () -> suiviService.decider(r.id(), new DecisionRequest(true, null), autre));
     }
 
     @Test
     void unRenvoiARevoirExigeUnCommentaire() {
-        SuiviResponse r = suiviService.soumettre(new SuiviRequest(TypeSuivi.PLANNING, moisCourant, "Plan"), technicien);
+        SuiviResponse r = suiviService.soumettre(new SuiviRequest(TypeSuivi.PLANNING, moisCourant, null, "Plan"), null, technicien);
         assertThrows(BusinessException.class,
                 () -> suiviService.decider(r.id(), new DecisionRequest(false, ""), superviseur));
     }

@@ -15,7 +15,8 @@ import ong.fodde.modules.projets.entity.TypeSuivi;
 @Repository
 public interface SuiviMensuelRepository extends JpaRepository<SuiviMensuel, UUID> {
 
-    Optional<SuiviMensuel> findByTechnicienIdAndTypeAndMoisAndIsDeletedFalse(UUID technicienId, TypeSuivi type, String mois);
+    Optional<SuiviMensuel> findByTechnicienIdAndTypeAndMoisAndProjetIdAndIsDeletedFalse(UUID technicienId, TypeSuivi type,
+                                                                                    String mois, UUID projetId);
 
     List<SuiviMensuel> findByTechnicienIdAndIsDeletedFalseOrderByMoisDescTypeAsc(UUID technicienId);
 
