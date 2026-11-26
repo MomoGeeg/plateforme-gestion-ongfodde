@@ -13,7 +13,10 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 import ong.fodde.shared.entity.BaseEntity;
 
-/** Planning ou rapport du mois d'un technicien, validé par son superviseur. Un seul par type et par mois. */
+/**
+ * Planning ou rapport du mois d'un technicien ou d'un animateur. Un seul par type et par mois.
+ * Circuit : superviseur (visa, correction du texte au besoin), puis coordonnateur du projet.
+ */
 @Entity
 @Table(name = "suivis_mensuels")
 @Getter
@@ -47,4 +50,15 @@ public class SuiviMensuel extends BaseEntity {
 
     @Column(name = "date_decision")
     private LocalDateTime dateDecision;
+
+    /** Superviseur qui a visé le document et l'a transmis au coordonnateur. */
+    @Column(name = "vise_par", columnDefinition = "uuid")
+    private UUID visePar;
+
+    @Column(name = "date_visa")
+    private LocalDateTime dateVisa;
+
+    /** Texte remis par l'auteur, conservé quand le superviseur l'a corrigé. */
+    @Column(name = "contenu_initial", columnDefinition = "text")
+    private String contenuInitial;
 }

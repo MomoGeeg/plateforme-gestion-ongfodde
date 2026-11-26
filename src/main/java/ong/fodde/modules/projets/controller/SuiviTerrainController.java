@@ -23,7 +23,7 @@ import ong.fodde.modules.projets.dto.SuiviDtos.SuiviRequest;
 import ong.fodde.modules.projets.dto.SuiviDtos.SuiviResponse;
 import ong.fodde.modules.projets.service.SuiviTerrainService;
 
-/** Planning et rapport mensuels des techniciens, équipe du superviseur. */
+/** Planning et rapport mensuels du terrain : remise, visa du superviseur, validation du coordonnateur, diffusion. */
 @RestController
 @RequestMapping("/api/suivis-terrain")
 @PreAuthorize("isAuthenticated()")
@@ -57,7 +57,14 @@ public class SuiviTerrainController {
         return service.equipe(user);
     }
 
-    /** Superviseur du technicien ou coordonnateur de l'animateur (vérifié par le service). */
+    /** Plannings et rapports validés par le coordonnateur du projet. */
+    @GetMapping("/valides")
+    @PreAuthorize("hasAnyAuthority('ROLE_RAF', 'ROLE_RESPONSABLE_PROGRAMMES', 'ROLE_SE', 'ROLE_RESPONSABLE_SE', 'ROLE_ADMIN')")
+    public List<SuiviResponse> valides(@AuthenticationPrincipal User user) {
+        return service.valides(user);
+    }
+
+    /** Superviseur du technicien, puis coordonnateur du projet (vérifié par le service). */
     @PatchMapping("/{id}/decision")
     public SuiviResponse decider(@PathVariable UUID id, @Valid @RequestBody DecisionRequest request,
                                  @AuthenticationPrincipal User user) {

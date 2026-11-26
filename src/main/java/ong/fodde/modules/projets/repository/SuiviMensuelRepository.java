@@ -23,4 +23,6 @@ public interface SuiviMensuelRepository extends JpaRepository<SuiviMensuel, UUID
 
     List<SuiviMensuel> findByTechnicienIdInAndStatutAndIsDeletedFalseOrderByCreatedAtAsc(Collection<UUID> technicienIds,
                                                                                          StatutSuivi statut);
+
+    List<SuiviMensuel> findByStatutAndIsDeletedFalseOrderByDateDecisionDesc(StatutSuivi statut);
 }

@@ -57,7 +57,7 @@ public class LiensUtilisateur {
         new Lien("mesures_perimetre", "saisi_par", "relevé d'indicateur", "relevés d'indicateurs"),
         new Lien("animateurs_projet", "animateur_id", "projet animé", "projets animés"),
         new Lien("pieces_activite", "ajoute_par", "pièce d'activité", "pièces d'activité"),
-        new Lien("suivis_mensuels", "technicien_id,decide_par", "planning ou rapport mensuel", "plannings ou rapports mensuels"),
+        new Lien("suivis_mensuels", "technicien_id,decide_par,vise_par", "planning ou rapport mensuel", "plannings ou rapports mensuels"),
         new Lien("materiels", "created_by,responsable_id", "matériel", "matériels"),
         new Lien("mouvements_materiel", "created_by,responsable_id", "mouvement de matériel", "mouvements de matériel"),
         new Lien("vehicules", "conducteur_habituel_id,created_by", "véhicule", "véhicules"),
