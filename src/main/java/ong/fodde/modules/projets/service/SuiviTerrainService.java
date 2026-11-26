@@ -1,5 +1,6 @@
 package ong.fodde.modules.projets.service;
 
+import java.io.IOException;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.YearMonth;
@@ -7,6 +8,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -16,12 +18,15 @@ import java.util.stream.Collectors;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 import ong.fodde.modules.auth.entity.User;
 import ong.fodde.modules.auth.repository.UserRepository;
+import ong.fodde.modules.ged.service.StockageFichierService;
 import ong.fodde.modules.projets.dto.SuiviDtos.ActiviteDuMois;
 import ong.fodde.modules.projets.dto.SuiviDtos.DecisionRequest;
 import ong.fodde.modules.projets.dto.SuiviDtos.MembreEquipe;
+import ong.fodde.modules.projets.dto.SuiviDtos.ProjetDuSuivi;
 import ong.fodde.modules.projets.dto.SuiviDtos.SuiviRequest;
 import ong.fodde.modules.projets.dto.SuiviDtos.SuiviResponse;
 import ong.fodde.modules.projets.entity.Activite;
@@ -42,14 +47,27 @@ import ong.fodde.shared.exception.BusinessException;
 import ong.fodde.shared.exception.ResourceNotFoundException;
 
 /**
- * Suivi mensuel du terrain : le technicien (ou l'animateur) remet son planning et son rapport du
- * mois ; le superviseur de ses périmètres le vise (en corrigeant le texte au besoin) et le transmet
- * au coordonnateur du projet, qui le valide ou le renvoie à son auteur. Validé, le document est
- * visible du RAF, du RP, du SE et du suivi-évaluation.
+ * Suivi mensuel du terrain. Le technicien (ou l'animateur) remet, pour un de ses projets, son
+ * planning (texte) et son rapport (fichier Word) du mois. Le superviseur de ses périmètres de ce
+ * projet le vise, en déposant au besoin une version corrigée, et le transmet au coordonnateur du
+ * projet, qui le valide ou le renvoie à son auteur. Validé, le document est visible du RAF, du RP,
+ * du SE et du suivi-évaluation. Chaque projet a un coordonnateur ; chaque périmètre, un seul projet.
  */
 @Service
 @Transactional
 public class SuiviTerrainService {
+
+    /** Fichier d'un rapport, pour le téléchargement. */
+    public record Fichier(String nom, String contentType, byte[] contenu) {
+    }
+
+    static final long TAILLE_FICHIER_MAX = 10L * 1024 * 1024;
+    private static final Map<String, String> TYPES_WORD = Map.of(
+            "doc", "application/msword",
+            "docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+    /** Lecture des documents validés. */
+    private static final String[] ROLES_DIFFUSION = {
+            "ROLE_RAF", "ROLE_RESPONSABLE_PROGRAMMES", "ROLE_SE", "ROLE_RESPONSABLE_SE"};
 
     private final SuiviMensuelRepository suiviRepository;
     private final PerimetreRepository perimetreRepository;
@@ -58,11 +76,12 @@ public class SuiviTerrainService {
     private final AnimateurProjetRepository animateurRepository;
     private final ProjetRepository projetRepository;
     private final DroitsProjet droits;
+    private final StockageFichierService stockage;
 
     public SuiviTerrainService(SuiviMensuelRepository suiviRepository, PerimetreRepository perimetreRepository,
                                ActiviteRepository activiteRepository, UserRepository userRepository,
                                AnimateurProjetRepository animateurRepository, ProjetRepository projetRepository,
-                               DroitsProjet droits) {
+                               DroitsProjet droits, StockageFichierService stockage) {
         this.suiviRepository = suiviRepository;
         this.perimetreRepository = perimetreRepository;
         this.activiteRepository = activiteRepository;
@@ -70,28 +89,48 @@ public class SuiviTerrainService {
         this.animateurRepository = animateurRepository;
         this.projetRepository = projetRepository;
         this.droits = droits;
+        this.stockage = stockage;
+    }
+
+    /** Projets pour lesquels l'utilisateur remet un planning ou un rapport. */
+    @Transactional(readOnly = true)
+    public List<ProjetDuSuivi> mesProjets(User user) {
+        return projetsDe(user.getId()).stream()
+                .map(p -> new ProjetDuSuivi(p.getId(), p.getCode(), p.getTitre())).toList();
     }
 
     /**
-     * Remise du planning ou du rapport d'un mois. Une nouvelle remise remplace la précédente tant
-     * qu'elle n'est pas validée.
+     * Remise du planning ou du rapport d'un mois pour un projet. Le rapport est un fichier Word.
+     * Une nouvelle remise remplace la précédente tant qu'elle n'est pas visée.
      */
-    public SuiviResponse soumettre(SuiviRequest request, User user) {
-        List<Perimetre> perimetres = perimetreRepository.findByTechnicienIdAndIsDeletedFalseOrderByNomAsc(user.getId());
-        List<Projet> projets = projetsAnimes(user.getId());
-        if (perimetres.isEmpty() && projets.isEmpty()) {
+    public SuiviResponse soumettre(SuiviRequest request, MultipartFile fichier, User user) {
+        List<Projet> projets = projetsDe(user.getId());
+        if (projets.isEmpty()) {
             throw new BusinessException("Aucun périmètre ni projet ne vous est affecté");
         }
-        if (perimetres.stream().allMatch(p -> p.getSuperviseurId() == null)
-                && projets.stream().allMatch(p -> p.getChefProjetId() == null)) {
-            throw new BusinessException("Personne n'est désigné pour valider vos documents");
+        Projet projet = request.projetId() == null && projets.size() == 1
+                ? projets.get(0)
+                : projets.stream().filter(p -> p.getId().equals(request.projetId())).findFirst()
+                        .orElseThrow(() -> new BusinessException("Choisissez un de vos projets"));
+        if (projet.getChefProjetId() == null) {
+            throw new BusinessException("Le projet " + projet.getCode() + " n'a pas de coordonnateur");
         }
         YearMonth mois = YearMonth.parse(request.mois());
         if (request.type() == TypeSuivi.RAPPORT && mois.isAfter(YearMonth.now())) {
             throw new BusinessException("Le rapport d'un mois à venir ne peut pas encore être remis");
         }
+        String contenu = request.contenu() == null || request.contenu().isBlank() ? null : request.contenu().trim();
+        boolean avecFichier = fichier != null && !fichier.isEmpty();
+        if (request.type() == TypeSuivi.RAPPORT && !avecFichier) {
+            throw new BusinessException("Joignez le rapport au format Word");
+        }
+        if (request.type() == TypeSuivi.PLANNING && contenu == null) {
+            throw new BusinessException("Décrivez les activités prévues");
+        }
+        String extension = avecFichier ? verifierWord(fichier) : null;
         SuiviMensuel suivi = suiviRepository
-                .findByTechnicienIdAndTypeAndMoisAndIsDeletedFalse(user.getId(), request.type(), request.mois())
+                .findByTechnicienIdAndTypeAndMoisAndProjetIdAndIsDeletedFalse(user.getId(), request.type(),
+                        request.mois(), projet.getId())
                 .orElseGet(SuiviMensuel::new);
         if (suivi.getId() != null && suivi.getStatut() == StatutSuivi.TRANSMIS) {
             throw new BusinessException("Ce document est déjà validé par le superviseur et transmis au coordonnateur");
@@ -101,8 +140,9 @@ public class SuiviTerrainService {
         }
         suivi.setType(request.type());
         suivi.setTechnicienId(user.getId());
+        suivi.setProjetId(projet.getId());
         suivi.setMois(request.mois());
-        suivi.setContenu(request.contenu().trim());
+        suivi.setContenu(contenu);
         suivi.setContenuInitial(null);
         suivi.setStatut(StatutSuivi.SOUMIS);
         suivi.setCommentaire(null);
@@ -110,7 +150,54 @@ public class SuiviTerrainService {
         suivi.setDateDecision(null);
         suivi.setVisePar(null);
         suivi.setDateVisa(null);
+        suivi.setFichierInitialNom(null);
+        suivi.setFichierInitialChemin(null);
+        if (avecFichier) {
+            suivi = suiviRepository.save(suivi);
+            enregistrerFichier(suivi, fichier, extension);
+        } else {
+            suivi.setFichierNom(null);
+            suivi.setFichierChemin(null);
+            suivi.setFichierTaille(null);
+        }
         return toResponse(suiviRepository.save(suivi), user);
+    }
+
+    /**
+     * Version corrigée du rapport, déposée par le superviseur avant son visa. Le fichier de
+     * l'auteur est gardé la première fois.
+     */
+    public SuiviResponse deposerCorrection(UUID id, MultipartFile fichier, User user) {
+        SuiviMensuel suivi = suiviExistant(id);
+        if (suivi.getStatut() != StatutSuivi.SOUMIS || !doitDecider(user, suivi)) {
+            throw new AccessDeniedException("Seul le superviseur corrige un document remis, avant son visa");
+        }
+        if (fichier == null || fichier.isEmpty()) {
+            throw new BusinessException("Le fichier est vide");
+        }
+        String extension = verifierWord(fichier);
+        if (suivi.getFichierInitialChemin() == null) {
+            suivi.setFichierInitialNom(suivi.getFichierNom());
+            suivi.setFichierInitialChemin(suivi.getFichierChemin());
+        }
+        enregistrerFichier(suivi, fichier, extension);
+        return toResponse(suiviRepository.save(suivi), user);
+    }
+
+    /** Fichier du document (ou la version de l'auteur, avant correction). */
+    @Transactional(readOnly = true)
+    public Fichier telecharger(UUID id, boolean initial, User user) {
+        SuiviMensuel suivi = suiviExistant(id);
+        if (!peutVoir(user, suivi)) {
+            throw new AccessDeniedException("Document réservé à son circuit de validation");
+        }
+        String chemin = initial ? suivi.getFichierInitialChemin() : suivi.getFichierChemin();
+        String nom = initial ? suivi.getFichierInitialNom() : suivi.getFichierNom();
+        if (chemin == null) {
+            throw new ResourceNotFoundException("Aucun fichier pour ce document");
+        }
+        return new Fichier(nom, TYPES_WORD.getOrDefault(extension(chemin), "application/octet-stream"),
+                stockage.lire(chemin));
     }
 
     /** Plannings et rapports remis par le technicien connecté. */
@@ -121,8 +208,8 @@ public class SuiviTerrainService {
     }
 
     /**
-     * Plannings et rapports suivis par l'utilisateur connecté : techniciens de ses périmètres
-     * (superviseur), techniciens des périmètres et animateurs de ses projets (coordonnateur).
+     * Plannings et rapports suivis par l'utilisateur connecté : ceux des périmètres qu'il supervise
+     * (superviseur) et ceux de ses projets (coordonnateur).
      */
     @Transactional(readOnly = true)
     public List<SuiviResponse> suivisEquipe(User user) {
@@ -133,6 +220,7 @@ public class SuiviTerrainService {
             return List.of();
         }
         return suiviRepository.findByTechnicienIdInAndIsDeletedFalseOrderByMoisDescTypeAsc(techniciens).stream()
+                .filter(s -> estDuCircuit(user, s))
                 .map(s -> toResponse(s, user)).toList();
     }
 
@@ -144,15 +232,13 @@ public class SuiviTerrainService {
     }
 
     /**
-     * Décision sur un document. Remis (SOUMIS) : le superviseur le vise, en corrigeant le texte au
-     * besoin, et le transmet au coordonnateur du projet ; sans superviseur, le coordonnateur décide
-     * directement. Transmis : le coordonnateur valide, et le document est diffusé. Un renvoi à
-     * l'auteur exige un commentaire.
+     * Décision sur un document. Remis (SOUMIS) : le superviseur le vise, en corrigeant au besoin le
+     * texte (planning) ou le fichier (rapport, par {@link #deposerCorrection}), et il passe chez le
+     * coordonnateur du projet ; sans superviseur, le coordonnateur décide directement. Transmis : le
+     * coordonnateur valide, et le document est diffusé. Un renvoi à l'auteur exige un commentaire.
      */
     public SuiviResponse decider(UUID id, DecisionRequest request, User user) {
-        SuiviMensuel suivi = suiviRepository.findById(id)
-                .filter(s -> !Boolean.TRUE.equals(s.getIsDeleted()))
-                .orElseThrow(() -> new ResourceNotFoundException("Document introuvable : " + id));
+        SuiviMensuel suivi = suiviExistant(id);
         if (suivi.getStatut() != StatutSuivi.SOUMIS && suivi.getStatut() != StatutSuivi.TRANSMIS) {
             throw new BusinessException("Ce document a déjà été traité");
         }
@@ -178,8 +264,7 @@ public class SuiviTerrainService {
         suivi.setCommentaire(commentaire);
         if (suivi.getStatut() == StatutSuivi.SOUMIS) {
             corriger(suivi, request.contenu());
-            Set<UUID> coordonnateurs = coordonnateursDe(suivi.getTechnicienId());
-            if (!coordonnateurs.isEmpty() && !coordonnateurs.contains(user.getId())) {
+            if (!user.getId().equals(coordonnateurDe(suivi))) {
                 suivi.setStatut(StatutSuivi.TRANSMIS);
                 suivi.setVisePar(user.getId());
                 suivi.setDateVisa(maintenant);
@@ -205,8 +290,8 @@ public class SuiviTerrainService {
 
     /**
      * Vrai si c'est à l'utilisateur de décider maintenant : un document remis attend un superviseur
-     * des périmètres de l'auteur (à défaut, un coordonnateur de ses projets) ; un document transmis
-     * attend un coordonnateur. L'auteur ne décide jamais de son propre document.
+     * des périmètres de l'auteur dans ce projet (à défaut, le coordonnateur du projet) ; un document
+     * transmis attend le coordonnateur. L'auteur ne décide jamais de son propre document.
      */
     private boolean doitDecider(User user, SuiviMensuel s) {
         if (user == null || user.getId().equals(s.getTechnicienId())) {
@@ -219,22 +304,33 @@ public class SuiviTerrainService {
             return true;
         }
         if (s.getStatut() == StatutSuivi.TRANSMIS) {
-            return coordonnateursDe(s.getTechnicienId()).contains(user.getId());
+            return user.getId().equals(coordonnateurDe(s));
         }
-        Set<UUID> superviseurs = superviseursDe(s.getTechnicienId());
-        return superviseurs.isEmpty()
-                ? coordonnateursDe(s.getTechnicienId()).contains(user.getId())
-                : superviseurs.contains(user.getId());
+        Set<UUID> superviseurs = superviseursDe(s);
+        return superviseurs.isEmpty() ? user.getId().equals(coordonnateurDe(s)) : superviseurs.contains(user.getId());
     }
 
-    private Set<UUID> superviseursDe(UUID auteurId) {
-        return perimetreRepository.findByTechnicienIdAndIsDeletedFalseOrderByNomAsc(auteurId).stream()
+    /** Superviseur des périmètres de l'auteur dans ce projet, ou coordonnateur du projet. */
+    private boolean estDuCircuit(User user, SuiviMensuel s) {
+        return user.getId().equals(coordonnateurDe(s)) || superviseursDe(s).contains(user.getId());
+    }
+
+    /** L'auteur, son circuit de validation, l'admin ; une fois validé, le RAF, le RP, le SE et le S&E. */
+    private boolean peutVoir(User user, SuiviMensuel s) {
+        return user.getId().equals(s.getTechnicienId()) || estDuCircuit(user, s)
+                || droits.aUnRole(user, "ROLE_ADMIN")
+                || (s.getStatut() == StatutSuivi.VALIDE && droits.aUnRole(user, ROLES_DIFFUSION));
+    }
+
+    private Set<UUID> superviseursDe(SuiviMensuel s) {
+        return perimetreRepository.findByTechnicienIdAndIsDeletedFalseOrderByNomAsc(s.getTechnicienId()).stream()
+                .filter(p -> Objects.equals(p.getProjetId(), s.getProjetId()))
                 .map(Perimetre::getSuperviseurId).filter(Objects::nonNull).collect(Collectors.toSet());
     }
 
-    private Set<UUID> coordonnateursDe(UUID auteurId) {
-        return projetsDe(auteurId).stream()
-                .map(Projet::getChefProjetId).filter(Objects::nonNull).collect(Collectors.toSet());
+    private UUID coordonnateurDe(SuiviMensuel s) {
+        return s.getProjetId() == null ? null
+                : projetRepository.findById(s.getProjetId()).map(Projet::getChefProjetId).orElse(null);
     }
 
     /** Projets de l'auteur : ceux de ses périmètres et ceux qu'il anime. */
@@ -252,6 +348,53 @@ public class SuiviTerrainService {
         return projetRepository.findByChefProjetId(coordonnateurId).stream()
                 .flatMap(p -> perimetreRepository.findByProjetIdAndIsDeletedFalseOrderByNomAsc(p.getId()).stream())
                 .map(Perimetre::getTechnicienId).filter(Objects::nonNull).collect(Collectors.toSet());
+    }
+
+    private SuiviMensuel suiviExistant(UUID id) {
+        return suiviRepository.findById(id)
+                .filter(s -> !Boolean.TRUE.equals(s.getIsDeleted()))
+                .orElseThrow(() -> new ResourceNotFoundException("Document introuvable : " + id));
+    }
+
+    private void enregistrerFichier(SuiviMensuel suivi, MultipartFile fichier, String extension) {
+        byte[] contenu;
+        try {
+            contenu = fichier.getBytes();
+        } catch (IOException e) {
+            throw new BusinessException("Lecture du fichier impossible");
+        }
+        String chemin = "suivis/" + suivi.getId() + "/" + UUID.randomUUID() + "." + extension;
+        stockage.deposer(chemin, contenu, TYPES_WORD.get(extension));
+        suivi.setFichierNom(nomPropre(fichier.getOriginalFilename()));
+        suivi.setFichierChemin(chemin);
+        suivi.setFichierTaille(fichier.getSize());
+    }
+
+    private static String verifierWord(MultipartFile fichier) {
+        if (fichier.getSize() > TAILLE_FICHIER_MAX) {
+            throw new BusinessException("Fichier trop volumineux (10 Mo maximum)");
+        }
+        String extension = extension(fichier.getOriginalFilename());
+        if (!TYPES_WORD.containsKey(extension)) {
+            throw new BusinessException("Le rapport doit être un fichier Word (.doc ou .docx)");
+        }
+        return extension;
+    }
+
+    private static String extension(String nom) {
+        if (nom == null) {
+            return "";
+        }
+        int point = nom.lastIndexOf('.');
+        return point < 0 ? "" : nom.substring(point + 1).toLowerCase(Locale.ROOT);
+    }
+
+    private static String nomPropre(String nom) {
+        String n = nom == null ? "rapport" : nom.replaceAll("[\\\\/:*?\"<>|\\r\\n]+", "_").trim();
+        if (n.isEmpty()) {
+            n = "rapport";
+        }
+        return n.length() > 255 ? n.substring(n.length() - 255) : n;
     }
 
     /**
@@ -390,7 +533,10 @@ public class SuiviTerrainService {
                 s.getContenu(), s.getStatut(), s.getCommentaire(), nomDe(s.getDecidePar()), s.getDateDecision(),
                 s.getCreatedAt(), s.getType() == TypeSuivi.PLANNING ? activitesDuMois(s) : List.of(),
                 nomDe(s.getVisePar()), s.getDateVisa(), s.getContenuInitial(),
-                projetsDe(s.getTechnicienId()).stream().map(Projet::getCode).filter(Objects::nonNull).toList(),
+                s.getProjetId(),
+                s.getProjetId() == null ? null
+                        : projetRepository.findById(s.getProjetId()).map(Projet::getCode).orElse(null),
+                s.getFichierNom(), s.getFichierTaille(), s.getFichierInitialNom(),
                 doitDecider(user, s));
     }
 }

@@ -154,9 +154,11 @@ public class ProjetService {
         projet.setDateDebut(request.dateDebut());
         projet.setDateFin(request.dateFin());
         projet.setDevise(request.devise() != null ? request.devise() : Devise.XOF);
-        if (request.chefProjetId() != null) {
-            verifierCompte(request.chefProjetId());
+        // Chaque projet a un coordonnateur (chargé de projet) : il valide le suivi du terrain.
+        if (request.chefProjetId() == null) {
+            throw new BusinessException("Le chargé de projet est obligatoire");
         }
+        verifierCompte(request.chefProjetId());
         projet.setChefProjetId(request.chefProjetId());
     }
 

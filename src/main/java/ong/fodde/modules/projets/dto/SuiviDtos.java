@@ -21,7 +21,12 @@ public final class SuiviDtos {
     public record SuiviRequest(
             @NotNull TypeSuivi type,
             @NotBlank @Pattern(regexp = "[0-9]{4}-(0[1-9]|1[0-2])", message = "Mois au format AAAA-MM") String mois,
-            @NotBlank String contenu) {
+            UUID projetId,
+            String contenu) {
+    }
+
+    /** Projet pour lequel un agent de terrain remet planning et rapport. */
+    public record ProjetDuSuivi(UUID id, String code, String titre) {
     }
 
     /** `contenu` : texte corrigé par le superviseur au moment du visa (facultatif). */
@@ -42,7 +47,9 @@ public final class SuiviDtos {
                                 LocalDateTime dateDecision, LocalDateTime createdAt,
                                 List<ActiviteDuMois> activites,
                                 String viseParNom, LocalDateTime dateVisa, String contenuInitial,
-                                List<String> projets, boolean aDecider) {
+                                UUID projetId, String projetCode,
+                                String fichierNom, Long fichierTaille, String fichierInitialNom,
+                                boolean aDecider) {
     }
 
     /** Un technicien encadré, avec l'avancement de ses activités et l'état de son suivi mensuel. */

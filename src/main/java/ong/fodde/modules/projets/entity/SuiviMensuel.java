@@ -14,7 +14,7 @@ import lombok.Setter;
 import ong.fodde.shared.entity.BaseEntity;
 
 /**
- * Planning ou rapport du mois d'un technicien ou d'un animateur. Un seul par type et par mois.
+ * Planning ou rapport du mois d'un technicien ou d'un animateur. Un seul par type, par mois et par projet.
  * Circuit : superviseur (visa, correction du texte au besoin), puis coordonnateur du projet.
  */
 @Entity
@@ -35,7 +35,12 @@ public class SuiviMensuel extends BaseEntity {
     @Column(name = "mois", nullable = false, length = 7)
     private String mois;
 
-    @Column(name = "contenu", nullable = false, columnDefinition = "text")
+    /** Projet concerné : le coordonnateur de ce projet valide le document. */
+    @Column(name = "projet_id", nullable = false, columnDefinition = "uuid")
+    private UUID projetId;
+
+    /** Planning : activités prévues ; rapport : résumé facultatif (le rapport est le fichier Word). */
+    @Column(name = "contenu", columnDefinition = "text")
     private String contenu;
 
     @Enumerated(EnumType.STRING)
@@ -61,4 +66,21 @@ public class SuiviMensuel extends BaseEntity {
     /** Texte remis par l'auteur, conservé quand le superviseur l'a corrigé. */
     @Column(name = "contenu_initial", columnDefinition = "text")
     private String contenuInitial;
+
+    /** Fichier Word du rapport (version en cours, corrigée le cas échéant par le superviseur). */
+    @Column(name = "fichier_nom", length = 255)
+    private String fichierNom;
+
+    @Column(name = "fichier_chemin", length = 500)
+    private String fichierChemin;
+
+    @Column(name = "fichier_taille")
+    private Long fichierTaille;
+
+    /** Fichier remis par l'auteur, gardé quand le superviseur dépose une version corrigée. */
+    @Column(name = "fichier_initial_nom", length = 255)
+    private String fichierInitialNom;
+
+    @Column(name = "fichier_initial_chemin", length = 500)
+    private String fichierInitialChemin;
 }
